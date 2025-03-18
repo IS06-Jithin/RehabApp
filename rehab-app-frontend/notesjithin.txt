@@ -1,0 +1,9 @@
+installed dependencies FE
+
+npm install @mediapipe/pose @mediapipe/camera_utils chart.js react-chartjs-2
+
+
+
+
+BE
+pip install uvicorn[standard] websockets numpy
