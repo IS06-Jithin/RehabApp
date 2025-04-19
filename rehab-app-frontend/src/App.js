@@ -86,107 +86,125 @@ function App() {
   // Setup MediaPipe Pose - Runs when exerciseStarted changes
   useEffect(() => {
     if (!exerciseStarted) return;
+
     console.log('Initializing MediaPipe Pose...');
     const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-    pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5, enableSegmentation: false });
+    // Inside the useEffect for MediaPipe Pose setup
 
-    let keypointSequence = [];
-    let frameCounter = 0;
-    let camera = null;
-    let isComponentMounted = true;
-    let firstResultProcessed = false;
+// ... (pose setup) ...
 
-    pose.onResults((results) => {
-        if (!isComponentMounted || !exerciseStarted) return;
-        const canvas = canvasRef.current; if (!canvas) { return; }
-        const ctx = canvas.getContext('2d'); if (!ctx) { return; }
+pose.setOptions({
+  modelComplexity: 2, // <-- MATCH backend complexity
+  smoothLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5,
+  enableSegmentation: false // Ensure segmentation is off if not needed
+});
 
-        if (!firstResultProcessed) {
-            firstResultProcessed = true;
-            setFeedback(prevFeedback => prevFeedback === 'Initializing...' ? '' : prevFeedback);
-        }
+let keypointSequence = [];
+let frameCounter = 0;
+let camera = null;
+let isComponentMounted = true;
+let firstResultProcessed = false;
 
-        ctx.save(); ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (results.poseLandmarks) {
-             // *** REFACTORED: Unconditional set based on result ***
-             setIsPoseDetectedLocally(true);
-             // *** END REFACTOR ***
+pose.onResults((results) => {
+  if (!isComponentMounted || !exerciseStarted) return;
+  const canvas = canvasRef.current; if (!canvas) { return; }
+  const ctx = canvas.getContext('2d'); if (!ctx) { return; }
 
-             try {
-                  drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-                  drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 6 });
-             } catch(e) { console.error("Drawing Error:", e); }
+  if (!firstResultProcessed) {
+      firstResultProcessed = true;
+      setFeedback(prevFeedback => prevFeedback === 'Initializing...' ? '' : prevFeedback);
+  }
 
-             const processFrameInterval = 5;
-             if (frameCounter % processFrameInterval === 0) {
-                 const keypoints = results.poseLandmarks.map(lm => [lm.x, lm.y, lm.z, lm.visibility || 0]);
-                 keypointSequence.push(keypoints);
-                 const sequenceLength = 10;
-                 if (keypointSequence.length >= sequenceLength) {
-                    
-                    // Create a payload object that includes a label if needed.
-                    const payload = {
-                      label: 'keypoint_sequence', // Change or remove if you don't have a specific label.
-                      keypoints: keypointSequence
-                    };
+  ctx.save(); ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                    // Log the payload before sending it.
-                    console.log("Sending payload to server:", payload);
+  // --- Drawing still uses poseLandmarks (Image Coordinates) ---
+  if (results.poseLandmarks) {
+       try {
+          drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+          drawLandmarks(ctx, results.poseLandmarks, { color: '#FF0000', lineWidth: 2, radius: 6 });
+      } catch(e) { console.error("Drawing Error:", e); }
+  }
 
-                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                      wsRef.current.send(JSON.stringify(payload));
-                    } else {
-                      console.warn('WS not open for send.');
-                    }
+  // --- Data Extraction uses poseWorldLandmarks ---
+  if (results.poseWorldLandmarks) { // <<< USE WORLD LANDMARKS
+      setIsPoseDetectedLocally(true); // Set detection flag based on WORLD landmarks now
 
-                     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                         wsRef.current.send(JSON.stringify(keypointSequence));
-                     } else { console.warn('WS not open for send.'); }
-                     keypointSequence = [];
-                 }
-             }
-             frameCounter++;
-        } else {
-             // *** REFACTORED: Unconditional set based on result ***
-             setIsPoseDetectedLocally(false);
-             // *** END REFACTOR ***
-        }
-        ctx.restore();
-    });
+      const processFrameInterval = 5; // Or adjust as needed
+      if (frameCounter % processFrameInterval === 0) {
+
+          // Extract ONLY x, y, z from world landmarks
+          const worldKeypoints = results.poseWorldLandmarks.map(lm => [lm.x, lm.y, lm.z]); // <<< (33, 3) structure
+
+          keypointSequence.push(worldKeypoints); // Add the (33, 3) frame
+
+          const sequenceLength = 16; // <<< MATCH backend sequence length
+          if (keypointSequence.length >= sequenceLength) {
+              // Prepare payload with extracted WORLD keypoints
+              const payload = {
+                  label: 'keypoint_sequence',
+                  // 'keypoints' now contains an array of frames,
+                  // where each frame is an array of 33 landmarks,
+                  // and each landmark is an array [x, y, z] (world coords)
+                  keypoints: keypointSequence,
+              };
+
+              // Log the payload before sending it.
+              console.log("Sending WORLD keypoints payload to server:", payload);
+
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(JSON.stringify(payload));
+              } else {
+                  console.warn('WebSocket is not open for sending.');
+              }
+
+              // Reset sequence - consider if you want overlapping windows later
+              keypointSequence = []; // Or use .slice(1) for a sliding window
+          }
+      }
+      frameCounter++;
+  } else {
+      // No WORLD landmarks detected
+      setIsPoseDetectedLocally(false);
+      // Optionally clear sequence buffer if desired when pose is lost
+      // keypointSequence = [];
+  }
+  ctx.restore();
+});
 
     const videoElement = videoRef.current;
     if (videoElement) {
-      console.log("Setting up camera...");
-      camera = new Camera(videoElement, {
-        onFrame: async () => {
-            if (videoElement.readyState >= 2 && pose && isComponentMounted) {
-                try { await pose.send({ image: videoElement }); }
-                catch (poseError) { console.error("Pose send Error:", poseError); }
-            }
-        }, width: 640, height: 480,
-      });
-      camera.start().then(() => {
-        if (isComponentMounted) console.log("Camera started.");
-      }).catch(err => {
-        console.error("Camera start Error:", err);
-        if (isComponentMounted) { setFeedback(`Camera Error: ${err.message}.`); setExerciseStarted(false); }
-      });
+        console.log("Setting up camera...");
+        camera = new Camera(videoElement, {
+            onFrame: async () => {
+                if (videoElement.readyState >= 2 && pose && isComponentMounted) {
+                    try {
+                        await pose.send({ image: videoElement });
+                    } catch (poseError) { console.error("Pose send Error:", poseError); }
+                }
+            }, width: 640, height: 480,
+        });
+        camera.start().then(() => {
+            if (isComponentMounted) console.log("Camera started.");
+        }).catch(err => {
+            console.error("Camera start Error:", err);
+            if (isComponentMounted) { setFeedback(`Camera Error: ${err.message}.`); setExerciseStarted(false); }
+        });
     } else {
-      console.error('Video element ref missing.');
-      setFeedback('Video element missing.'); setExerciseStarted(false);
+        console.error('Video element ref missing.');
+        setFeedback('Video element missing.'); setExerciseStarted(false);
     }
 
-    // Cleanup for THIS MediaPipe/Camera effect
     return () => {
-      console.log('Cleaning up MediaPipe/Camera...');
-      isComponentMounted = false;
-      camera?.stop();
-      pose.close();
-      // Setter call in cleanup is OK and doesn't require adding setter to deps
-      setIsPoseDetectedLocally(false);
+        console.log('Cleaning up MediaPipe/Camera...');
+        isComponentMounted = false;
+        camera?.stop();
+        pose.close();
+        setIsPoseDetectedLocally(false);
     };
-  // This effect correctly depends ONLY on exerciseStarted after the refactoring above
   }, [exerciseStarted]);
+
 
 
   // Effect for managing user feedback based on detection status

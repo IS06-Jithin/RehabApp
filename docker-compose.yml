@@ -1,0 +1,28 @@
+# docker-compose.yml
+version: "3.9" # This line is technically obsolete but harmless
+
+services:
+  backend:
+    build:
+      context: ./rehab-app-backend
+    ports:
+      - "8000:8000"
+    # volumes:  <-- Comment out or delete this section for backend
+    #   - ./rehab-app-backend:/app
+    restart: always
+
+  frontend:
+    build:
+      context: ./rehab-app-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      # Keep this volume for frontend development live reloading if needed
+      - ./rehab-app-frontend:/app
+      # Add node_modules volume to prevent local node_modules from overwriting container's
+      - /app/node_modules
+    stdin_open: true
+    tty: true
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Helps in macOS file watching
+    restart: always
