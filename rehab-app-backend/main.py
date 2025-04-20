@@ -41,7 +41,7 @@ except Exception as e:
     logger.error(f"Unexpected error loading model: {e}")
 
 
-# --- Database Setup (Keep as is, ensure error handling is sufficient) ---
+# --- Database Setup  ---
 DB_PATH = "rehab_progress.db"
 conn = None
 cursor = None

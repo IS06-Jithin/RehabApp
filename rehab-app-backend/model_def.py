@@ -4,22 +4,6 @@ import torch.nn.functional as F
 from pathlib import Path
 import sys # To potentially add paths if classes are in separate files
 
-# --- Constants (Required by the model definition) ---
-# Ensure these match the configuration of the *specific model file* being loaded
-ERR_JOINTS   = [
-  "LEFT_ELBOW","RIGHT_ELBOW",
-  "LEFT_SHOULDER","RIGHT_SHOULDER",
-  "LEFT_HIP","RIGHT_HIP",
-  "LEFT_KNEE","RIGHT_KNEE",
-  "SPINE","HEAD",
-]
-N_ERR = len(ERR_JOINTS)
-NUM_EXERCISES = 6 # Example: Must match the 'num_ex' the model was trained with
-
-# --- Model Class Definitions ---
-# These MUST be defined *before* calling torch.load with weights_only=False
-# They must EXACTLY match the definitions used when the model was saved.
-
 class KeypointEncoder(nn.Module):
     def __init__(self, in_dim:int, embed:int=512):
         super().__init__()
