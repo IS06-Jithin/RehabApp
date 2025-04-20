@@ -125,6 +125,8 @@ def infer_keypoints(model: PoseQualityNetKP,
         # 2. Convert to NumPy array and validate shape
         # Expects input like: [[ [x,y,z], [x,y,z], ... 33 joints ], ... 16 frames]
         keypoints_array = np.array(keypoints_sequence, dtype=np.float32)
+        if np.allclose(keypoints_array, 0):
+            return "No pose detected", "Adjust yourself", err_values
         expected_shape = (SEQUENCE_LENGTH, N_JOINTS, NUM_COORDS)
         if keypoints_array.shape != expected_shape:
             logger.error(f"Unexpected keypoints shape: {keypoints_array.shape}. Expected {expected_shape}.")

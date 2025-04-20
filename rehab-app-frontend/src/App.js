@@ -29,6 +29,9 @@
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const wsRef = useRef(null);
+    const noPoseHoldRef = useRef(false);
+    const noPoseHoldTimeout = useRef(null);
+
     const [isPoseDetectedLocally, setIsPoseDetectedLocally] = useState(false);
     const [feedback, setFeedback] = useState('');
     const [suggestion, setSuggestion] = useState('');
@@ -211,9 +214,51 @@
           setIsPoseDetectedLocally(true);
           const processFrameInterval = 5;
           if (frameCounter % processFrameInterval === 0) {
-            const worldKeypoints = results.poseWorldLandmarks.map((lm) => [lm.x, lm.y, lm.z]);
-            keypointSequence.push(worldKeypoints);
+            const VISIBILITY_THRESHOLD = 0.8;
+            const REQUIRED_INDICES = [11, 12, 13, 14, 23, 24, 25, 26, 27, 28, 0, 15, 16, 19, 20, 31, 32]; // Add joint indices based on your ERR_JOINTS logic
 
+            let allRequiredVisible = true;
+            const worldKeypoints = results.poseWorldLandmarks.map((lm, index) => {
+              if (REQUIRED_INDICES.includes(index) && lm.visibility < VISIBILITY_THRESHOLD) {
+                allRequiredVisible = false;
+              }
+              return lm.visibility >= VISIBILITY_THRESHOLD ? [lm.x, lm.y, lm.z] : [0.0, 0.0, 0.0];
+            });
+
+            if (allRequiredVisible && worldKeypoints.length === 33) {
+              keypointSequence.push(worldKeypoints);
+              setIsPoseDetectedLocally(true);
+            } else {
+              setIsPoseDetectedLocally(false);
+            }
+
+            if (allRequiredVisible && worldKeypoints.length === 33) {
+              keypointSequence.push(worldKeypoints);
+            
+              const sequenceLength = 16;
+              if (keypointSequence.length >= sequenceLength) {
+                const payload = {
+                  label: 'keypoint_sequence',
+                  keypoints: keypointSequence,
+                  exercise_id: currentExIdForMediaPipe,
+                };
+            
+                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                  try {
+                    wsRef.current.send(JSON.stringify(payload));
+                  } catch (sendError) {
+                    console.error('WS Send Error:', sendError);
+                  }
+                } else {
+                  console.warn('WebSocket is not open for sending keypoints.');
+                }
+            
+                keypointSequence = [];
+              }
+            } else {
+              setIsPoseDetectedLocally(false); // Mark as not detected to show user-friendly message
+            }
+            
             const sequenceLength = 16;
             if (keypointSequence.length >= sequenceLength) {
               const payload = {
@@ -287,23 +332,26 @@
     // Manage "No pose detected" message
     useEffect(() => {
       if (!exerciseStarted) return;
-
+    
       if (!isPoseDetectedLocally) {
-        if (
-          feedback !== 'Initializing...' &&
-          feedback !== 'Exercise stopped.' &&
-          !feedback.toLowerCase().includes('error') &&
-          !feedback.toLowerCase().includes('lost')
-        ) {
+        if (!noPoseHoldRef.current) {
           setFeedback('No pose detected. Please adjust your position.');
+          setSuggestion('');
+          noPoseHoldRef.current = true;
+    
+          // Start 1-second hold
+          noPoseHoldTimeout.current = setTimeout(() => {
+            noPoseHoldRef.current = false;
+          }, 1000);
         }
-        setSuggestion('');
       } else {
-        if (feedback === 'No pose detected. Please adjust your position.') {
+        // Only clear message if hold period has passed
+        if (!noPoseHoldRef.current && feedback === 'No pose detected. Please adjust your position.') {
           setFeedback('');
         }
       }
     }, [exerciseStarted, isPoseDetectedLocally, feedback]);
+    
 
     // Control Functions
     const handleExerciseChange = (event) => {
