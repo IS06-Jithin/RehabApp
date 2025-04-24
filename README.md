@@ -11,4 +11,6 @@ docker-compose up
 
 pip freeze > requirements.txt
 
+cd rehab-app-backend 
+cd rehab-app-frontend
 

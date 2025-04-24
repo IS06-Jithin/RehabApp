@@ -143,7 +143,7 @@ def load_model(
                    else torch.device("cpu"))
     print(f"Loading weights to device {device}")
 
-    # 2) Instantiate EXACT same architecture you trained
+    # 2) Instantiate EXACT same architecture trained
     IN_DIM = 33 * 3
     model = PoseQualityNetKP(
         in_dim=IN_DIM,
