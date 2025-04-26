@@ -3,13 +3,11 @@ gTTS==2.5.4
 httptools==0.6.4
 mediapipe==0.10.18
 opencv-python==4.11.0.86
-pip==25.0
 python-dotenv==1.1.0
 PyYAML==6.0.2
 torchaudio==2.7.0
 torchvision==0.22.0
 uvicorn==0.34.2
-uvloop==0.21.0
 watchfiles==1.0.5
 websockets==15.0.1
 wheel==0.45.1
