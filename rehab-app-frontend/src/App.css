@@ -36,3 +36,151 @@
     transform: rotate(360deg);
   }
 }
+
+/* ─── layout for video + chart ───────────────────────────────────────────── */
+.content-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+/* ≥ 992 px: video left, chart right – stay centred even if chart missing */
+@media (min-width: 992px) {
+  .content-wrapper {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;   /* <— keeps video centred when alone */
+  }
+  .video-container,
+  .video-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed #bbb;
+    border-radius: 8px;
+    color: #666;
+    width: 100%;         /* fill available width on phones/tablets   */
+    max-width: 640px;    /* don’t grow past video size               */
+    aspect-ratio: 4 / 3; /* gives it height even before desktop MQ   */
+  }
+  @media (min-width: 992px) {
+    .video-container,
+    .video-container {
+      position: relative;      /* <-- NEW: makes abs-pos children stay inside */
+      width: 100%;
+      max-width: 640px;
+      aspect-ratio: 4 / 3;     /* keeps 4:3 box on narrow screens            */
+    }
+    .video-placeholder {
+      width: 640px;
+      height: 480px;
+    }
+  }
+  .chart-container,
+  .chart-placeholder {
+    flex: 1;
+    max-width: 480px;
+    height: 480px;
+  }
+}
+
+/* placeholder for chart */
+.chart-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed #bbb;
+  border-radius: 8px;
+  font-style: italic;
+  color: #666;
+}
+
+/* make Chart.js canvas fill .chart-container */
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ─── nicer heading & buttons ────────────────────────────────────────────── */
+h1 {
+  margin-top: 0;
+  font-size: 2.2rem;
+  font-weight: 700;
+}
+
+button.btn {
+  padding: 8px 24px;
+  font-size: 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.25s;
+}
+
+button.btn-start {
+  background: #1976d2;
+  color: #fff;
+}
+
+button.btn-start:hover {
+  background: #1153a5;
+}
+
+button.btn-stop {
+  background: #d32f2f;
+  color: #fff;
+}
+
+button.btn-stop:hover {
+  background: #a82828;
+}
+
+/* ─── Exercise selector dropdown ─────────────────────────── */
+.exercise-select {
+  padding: 8px 12px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #f7f7f7;
+  cursor: pointer;
+  transition: border .2s, box-shadow .2s;
+}
+
+.exercise-select:hover {
+  border-color: #888;
+}
+
+.exercise-select:focus {
+  outline: none;
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, .3);
+}
+
+/* ─── Buttons (base class + variants) ────────────────────── */
+.btn {
+  padding: 8px 24px;
+  font-size: 16px;
+  border: none;
+  border-radius: 24px;      /* pill shape */
+  cursor: pointer;
+  transition: background .25s, transform .1s;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-start {
+  background: #1976d2;
+  color: #fff;
+}
+
+.btn-start:hover { background: #1565c0; }
+
+.btn-stop {
+  background: #d32f2f;
+  color: #fff;
+}
+
+.btn-stop:hover { background: #b71c1c; }
