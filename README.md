@@ -16,3 +16,4 @@ cd rehab-app-frontend
 
 pip list --format=freeze --not-required > requirements.txt
 
+pyobjc==11.0 delete this package from model training requirements.txt
