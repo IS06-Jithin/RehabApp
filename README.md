@@ -14,3 +14,5 @@ pip freeze > requirements.txt
 cd rehab-app-backend 
 cd rehab-app-frontend
 
+pip list --format=freeze --not-required > requirements.txt
+
