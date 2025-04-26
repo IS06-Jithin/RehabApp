@@ -1,6 +1,6 @@
 # RehabApp
 
-uvicorn main:app --reload  
+vicorn main:app --host 0.0.0.0 --port 8000 --relo
 npm start
 
 docker-compose up --build
