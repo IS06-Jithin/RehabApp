@@ -1,13 +1,14 @@
-import math
-import time
+import math, time, sqlite3, statistics
 from pathlib import Path
+from datetime import datetime
+from typing import List, Optional
 
-from fastapi import FastAPI, WebSocket
-from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import torch, torch.nn as nn, torch.nn.functional as F
+from fastapi import FastAPI, WebSocket, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from fastapi import APIRouter
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Constants & Model Setup (same as standalone script)────────────────────────────
@@ -200,7 +201,7 @@ def build_advice(errs: np.ndarray) -> str:
         joint_str = f"{joints[0]} and {joints[1]}"
     else:
         joint_str = f"{joints[0]}, {joints[1]} and {joints[2]}"
-    return f"Please adjust your {joint_str} properly."
+    return f"Adjust your {joint_str} properly."
 
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -212,98 +213,169 @@ def build_advice(errs: np.ndarray) -> str:
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
 
-    progress_history: list[dict] = []
+    # session-level accumulators for KPIs
+    correct_reps = 0
+    wrong_reps = 0
+    per_joint_sum = np.zeros(len(ERR_JOINTS), np.float32)
+    per_joint_n = 0
 
     while True:
         try:
-            data = await ws.receive_json()
+            msg = await ws.receive_json()
         except Exception:
-            break  # client disconnected
+            break  # client closed
 
-        label = data.get("label")
-
-        # ------------------------------------------------------------------
-        # The React client only sends one type: "keypoint_sequence"
-        # containing a *full* 16‑frame tensor plus exercise_id.
-        # ------------------------------------------------------------------
-        if label != "keypoint_sequence":
+        if msg.get("label") == "stop":
+            # ─ send session summary and close ─
+            mean_joint_err = (per_joint_sum / max(1, per_joint_n)).tolist()
             await ws.send_json(
                 {
-                    "feedback": "Unknown message label",
-                    "suggestion": "",
-                    "progress": {"timestamps": [], "deviations": []},
+                    "type": "summary",
+                    "correct": correct_reps,
+                    "total": correct_reps + wrong_reps,
+                    "joint_errors": mean_joint_err,
                 }
             )
+            break
+
+        if msg.get("label") != "keypoint_sequence":
+            await ws.send_json({"type": "error", "msg": "unknown label"})
             continue
 
-        keypoints = data.get("keypoints", [])
-        exercise_id = int(data.get("exercise_id", 0))
-        if exercise_id not in EXERCISE_MAP:
-            await ws.send_json(
-                {
-                    "feedback": "Invalid exercise ID",
-                    "suggestion": "",
-                    "progress": {"timestamps": [], "deviations": []},
-                }
-            )
+        kp = np.asarray(msg["keypoints"], np.float32)
+        exid = int(msg["exercise_id"])
+        if kp.shape != (SEQ_LEN, N_JOINTS, 3):
             continue
 
-        # shape check --------------------------------------------------------
-        kp_np = np.asarray(keypoints, dtype=np.float32)
-        if kp_np.shape != (SEQ_LEN, N_JOINTS, 3):
-            await ws.send_json(
-                {
-                    "feedback": "Keypoints shape invalid",
-                    "suggestion": "",
-                    "progress": {"timestamps": [], "deviations": []},
-                }
-            )
-            continue
-
-        # inference ----------------------------------------------------------
-        seq_tensor = torch.tensor(
-            kp_np.reshape(SEQ_LEN, -1), dtype=torch.float32, device=DEVICE
-        ).unsqueeze(0)
-        ex_1h = F.one_hot(
-            torch.tensor([exercise_id - 1], device=DEVICE), NUM_EX
+        seq = torch.tensor(kp.reshape(SEQ_LEN, -1), device=DEVICE).unsqueeze(0)
+        ex1 = F.one_hot(
+            torch.tensor([exid - 1], device=DEVICE), len(EXERCISE_MAP)
         ).float()
 
         with torch.no_grad():
-            log_q, err_hat, log_ex = model(seq_tensor, ex_1h)
+            log_q, err_hat, log_ex = model(seq, ex1)
 
         q_pred = log_q.argmax(1).item()
         ex_pred = log_ex.argmax(1).item() + 1
         errs = err_hat.squeeze().cpu().numpy()
 
-        # feedback construction ---------------------------------------------
-        if ex_pred != exercise_id:
-            pred_name = EXERCISE_MAP.get(ex_pred, f"Ex {ex_pred}")
-            feedback = f"Wrong exercise! It looks like you're doing {pred_name}."
-            suggestion = ""
+        if ex_pred != exid:
+            fb = f"Wrong exercise! Looks like {EXERCISE_MAP.get(ex_pred,'')}."
+            sug = ""
         else:
             if q_pred == 1:
-                feedback = "You're on the right track!"
-                suggestion = ""
+                fb, sug = "You're on the right track!", ""
+                correct_reps += 1
             else:
-                feedback = "You're doing it wrongly!"
-                suggestion = build_advice(errs)
+                fb, sug = "You're doing it wrongly!", build_advice(errs)
+                wrong_reps += 1
 
+        per_joint_sum += np.abs(errs)
+        per_joint_n += 1
         avg_dev = float(np.mean(np.abs(errs)))
-        progress_history.append(
-            {
-                "timestamp": int(time.time() * 1000),
-                "deviation": avg_dev,
-                "classification": feedback,
-            }
-        )
 
         await ws.send_json(
             {
-                "feedback": feedback,
-                "suggestion": suggestion,
-                "progress": {
-                    "timestamps": [p["timestamp"] for p in progress_history][-20:],
-                    "deviations": [p["deviation"] for p in progress_history][-20:],
-                },
+                "type": "progress",
+                "feedback": fb,
+                "suggestion": sug,
+                "avg_error": avg_dev,
+                "correct": correct_reps,
+                "total": correct_reps + wrong_reps,
             }
         )
+
+
+# ────────────────────────────── feedback DB setup ─────────────────────────────
+DB_PATH = Path("feedback.sqlite")
+
+
+def get_db():
+    """yields a sqlite3 connection per-request and closes it afterwards"""
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def init_db():
+    """create table once"""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS feedback (
+                   id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                   ts            TEXT    NOT NULL,
+                   ease_of_use   INTEGER NOT NULL,
+                   accuracy      INTEGER NOT NULL,
+                   satisfaction  INTEGER NOT NULL,
+                   comments      TEXT
+               )"""
+        )
+
+
+init_db()
+
+
+# ─────────────────────────────── Feedback schema ─────────────────────────────
+class FeedbackIn(BaseModel):
+    ease_of_use: int = Field(..., ge=1, le=5)
+    accuracy: int = Field(..., ge=1, le=5)
+    satisfaction: int = Field(..., ge=1, le=5)
+    comments: Optional[str] = None
+
+
+class FeedbackOut(FeedbackIn):
+    id: int
+    ts: str
+
+
+class FeedbackSummary(BaseModel):
+    count: int
+    avg_ease: float
+    avg_accuracy: float
+    avg_satisf: float
+
+
+# ───────────────────────────── Feedback endpoints ────────────────────────────
+@app.post("/feedback", response_model=FeedbackOut, status_code=201)
+def create_feedback(fb: FeedbackIn, db=Depends(get_db)):
+    ts = datetime.utcnow().isoformat()
+    cur = db.execute(
+        "INSERT INTO feedback(ts,ease_of_use,accuracy,satisfaction,comments)"
+        " VALUES (?,?,?,?,?)",
+        (ts, fb.ease_of_use, fb.accuracy, fb.satisfaction, fb.comments),
+    )
+    db.commit()
+    return FeedbackOut(id=cur.lastrowid, ts=ts, **fb.dict())
+
+
+@app.get("/feedback", response_model=List[FeedbackOut])
+def list_feedback(db=Depends(get_db)):
+    rows = db.execute("SELECT * FROM feedback ORDER BY id DESC").fetchall()
+    return [FeedbackOut(**row) for row in rows]
+
+
+@app.get("/feedback/summary", response_model=FeedbackSummary)
+def feedback_summary(db=Depends(get_db)):
+    rows = db.execute(
+        "SELECT ease_of_use,accuracy,satisfaction FROM feedback"
+    ).fetchall()
+    if not rows:
+        return FeedbackSummary(count=0, avg_ease=0, avg_accuracy=0, avg_satisf=0)
+    ease, acc, sat = zip(*rows)
+    return FeedbackSummary(
+        count=len(rows),
+        avg_ease=round(statistics.mean(ease), 2),
+        avg_accuracy=round(statistics.mean(acc), 2),
+        avg_satisf=round(statistics.mean(sat), 2),
+    )
+
+
+@app.delete("/feedback/{fid}", status_code=204)
+def delete_feedback(fid: int, db=Depends(get_db)):
+    cur = db.execute("DELETE FROM feedback WHERE id=?", (fid,))
+    db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "feedback id not found")

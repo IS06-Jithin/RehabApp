@@ -37,6 +37,24 @@
   }
 }
 
+/* ------------- overall page background -------------- */
+body {
+  /* pale-blue background for every page */
+  background: #c5d7d4;   /* feel free to tweak shade */
+}
+
+/* ------------- golden yellow feedback button -------- */
+.btn-feedback {
+  background: #ffc107;        /* golden / bootstrap-warning yellow */
+  color: #000;
+  border: none;
+}
+
+.btn-feedback:hover,
+.btn-feedback:focus {
+  background: #ffca28;
+}
+
 /* ─── layout for video + chart ───────────────────────────────────────────── */
 .content-wrapper {
   display: flex;
@@ -54,12 +72,13 @@
   }
   .video-container,
   .video-placeholder {
+    background:  #e9dede;
     display: flex;
     align-items: center;
     justify-content: center;
     border: 2px dashed #bbb;
     border-radius: 8px;
-    color: #666;
+    color: #1b992a;
     width: 100%;         /* fill available width on phones/tablets   */
     max-width: 640px;    /* don’t grow past video size               */
     aspect-ratio: 4 / 3; /* gives it height even before desktop MQ   */
@@ -87,13 +106,14 @@
 
 /* placeholder for chart */
 .chart-placeholder {
+  background:  #e9dede;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 2px dashed #bbb;
   border-radius: 8px;
   font-style: italic;
-  color: #666;
+  color: #5056c8;
 }
 
 /* make Chart.js canvas fill .chart-container */
@@ -119,7 +139,7 @@ button.btn {
 }
 
 button.btn-start {
-  background: #1976d2;
+  background: #119e26;
   color: #fff;
 }
 
@@ -184,3 +204,20 @@ button.btn-stop:hover {
 }
 
 .btn-stop:hover { background: #b71c1c; }
+
+/* KPI cards -------------------------------------------------- */
+.kpi-grid      { display:flex; gap:12px; justify-content:center; flex-wrap:wrap }
+.kpi-card      { flex:1 1 110px; background:#f9f9f9; border-radius:8px;
+                 padding:12px; box-shadow:0 1px 3px rgba(0,0,0,.1) }
+.kpi-card h4   { margin:0; font-size:14px; color:#666 }
+.kpi-card span { font-size:20px; font-weight:600 }
+
+/* ─── feedback colours ───────────────────────────── */
+.feedback-good {   color: #2e7d32; }   /* green */
+.feedback-bad  {   color: #c62828; }   /* red   */
+.feedback-init {   color: #ef6c00; }   /* dark-orange */
+
+/* ─── suggestion colour ──────────────────────────── */
+.suggestion-text { color: #5d4037; }   /* dark-brown */
+
+

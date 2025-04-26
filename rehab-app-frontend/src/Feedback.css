@@ -1,0 +1,76 @@
+/* wrapper + heading */
+.fb-wrapper {
+  max-width: 500px;
+  margin: 40px auto;
+  text-align: center;
+}
+
+/* grey subtitle with averages */
+.avg-line {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 25px;
+}
+
+/* form layout */
+.fb-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* one line: label | slider | value */
+.fb-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fb-field label {
+  flex: 0 0 110px;          /* fixed width so everything lines up */
+  text-align: left;
+  font-weight: 500;
+}
+
+.fb-field input[type=range] {
+  flex: 1 1 auto;
+}
+
+.slider-val {
+  width: 24px;
+  text-align: right;
+  font-weight: 600;
+}
+
+/* comments box takes full width */
+.fb-comments {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.fb-comments label {
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.fb-comments textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+/* message after submit */
+.msg { margin-top: 10px; }
+
+/* back button */
+.back-btn {
+  margin-top: 32px;
+}
+
+/* secondary button style (matches your existing palette) */
+.btn-secondary {
+  background: #ffca28;
+  border: 1px solid #ffca28;
+  padding: 8px 22px;
+  cursor: pointer;
+}
