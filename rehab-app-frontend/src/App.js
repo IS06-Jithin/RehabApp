@@ -32,6 +32,23 @@ const EXERCISE_MAP = {
   6: "Squats",
 };
 
+const JOINT_TRIPLETS = {
+  "left elbow"   : [11, 13, 15],
+  "right elbow"  : [12, 14, 16],
+  "left shoulder": [11, 13, 23],
+  "right shoulder":[12, 14, 24],
+  "left hip"     : [11, 23, 25],
+  "right hip"    : [12, 24, 26],
+  "left knee"    : [23, 25, 27],
+  "right knee"   : [24, 26, 28],
+  "spine"        : [11, 12, 23],
+  "head"         : [0, 11, 12],
+  "left wrist"   : [13, 15, 19],
+  "right wrist"  : [14, 16, 20],
+  "left ankle"   : [25, 27, 31],
+  "right ankle"  : [26, 28, 32],
+};
+
 const SEQ_LEN = 16;
 
 /* ──────────────────────────────────────────────
@@ -46,6 +63,7 @@ export default function App() {
   const wsRef     = useRef(null);
   const bufRef    = useRef([]);
   const synthRef = useRef(window.speechSynthesis);
+  const hlRef = useRef(new Set());
 
   /* UI state */
   const [cameraReady,      setCameraReady ] = useState(false);
@@ -112,7 +130,17 @@ export default function App() {
       if (res.poseLandmarks) {
         drawConnectors(ctx, res.poseLandmarks, POSE_CONNECTIONS,
                        { color: "#00FF00", lineWidth: 4 });
-        drawLandmarks(ctx, res.poseLandmarks, { color: "#FF0000", radius: 5 });
+        // draw landmarks – highlight the specified ones in amber
+        const highlightOnly = hlRef.current.size > 0;
+        res.poseLandmarks.forEach((lm, i) => {
+          const isHL = hlRef.current.has(i);
+          if (!highlightOnly || isHL) {
+            drawLandmarks(ctx, [lm], {
+              color : isHL ? "#FFA500" : "#87CEEB",   // amber vs red
+              radius: isHL ? 6 : 4,
+            });
+          }
+        });
 
         const w = res.poseWorldLandmarks;
         if (w?.length === 33) {
@@ -185,6 +213,25 @@ export default function App() {
           correct: d.correct,
           total  : d.total,
         });
+        /* update highlight indices based on “Adjust your …” suggestion */
+        if (typeof d.suggestion === "string") {
+          const m = d.suggestion.match(/adjust your (.+?) properly/i);
+          if (m) {
+            const joints = m[1]
+              .toLowerCase()
+              .split(/,| and /)
+              .map(s => s.trim())
+              .filter(Boolean);
+
+            const inds = new Set();
+            joints.forEach(j => {
+              (JOINT_TRIPLETS[j] || []).forEach(i => inds.add(i));
+            });
+            hlRef.current = inds;        // save for drawing loop
+          } else {
+            hlRef.current = new Set();   // no highlight
+          }
+        }
         /* ───  histogram data ─── */
         if (d.joint_errors_mean) setJointMean([...d.joint_errors_mean]);   
         if (d.top_joints) {
