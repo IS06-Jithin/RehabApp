@@ -273,7 +273,7 @@ async def websocket_endpoint(ws: WebSocket):
 
         avg_dev = float(errs_abs.mean())
         # ───────── histogram logic ─────────
-        track = (time.time() - start_ts) >= 20.0
+        track = (time.time() - start_ts) >= 10.0  # 10 sec warm up delay
         if track and (ex_pred == exid) and (q_pred == 0):  # keep gate
             per_joint_sum += errs_abs
             per_joint_n += 1
@@ -286,8 +286,8 @@ async def websocket_endpoint(ws: WebSocket):
         )
 
         # top-3 joints for *this* frame (used by UI)
-        mean_now = per_joint_sum / max(1, per_joint_n)  
-        top3_idx = np.argsort(mean_now)[::-1][:3]  
+        mean_now = per_joint_sum / max(1, per_joint_n)
+        top3_idx = np.argsort(mean_now)[::-1][:3]
         top3_labels = [JOINT_LABELS[i] for i in top3_idx]
 
         await ws.send_json(
