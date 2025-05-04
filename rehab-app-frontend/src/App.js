@@ -64,6 +64,8 @@ export default function App() {
   const bufRef    = useRef([]);
   const synthRef = useRef(window.speechSynthesis);
   const hlRef = useRef(new Set());
+  const lastSpokenRef = useRef("");     
+  const speakingRef = useRef(false);    
 
   /* UI state */
   const [cameraReady,      setCameraReady ] = useState(false);
@@ -86,11 +88,27 @@ export default function App() {
     //  2. Otherwise speak feedback
     const textToSpeak = suggestion.trim() || feedback.trim();
     if (!textToSpeak) return;                     // both empty → do nothing
-  
-    const utter = new SpeechSynthesisUtterance(textToSpeak);
-    synthRef.current.cancel();                    // stop anything already talking
-    synthRef.current.speak(utter);
-  }, [suggestion, feedback, running]);            // ← keep both in the deps list
+     
+    lastSpokenRef.current = textToSpeak;                        
+
+    const speak = () => {
+      const utter = new SpeechSynthesisUtterance(textToSpeak);
+      speakingRef.current = true;                              
+      utter.onend = () => { speakingRef.current = false; };     
+      synthRef.current.speak(utter);
+    };
+
+    if (speakingRef.current) {
+      /* queue once the current utterance ends */
+      const handler = () => {
+        synthRef.current.removeEventListener("end", handler);
+        speak();
+      };
+      synthRef.current.addEventListener("end", handler);        // ★ CHANGED
+    } else {
+      speak();
+    }
+  }, [suggestion, feedback, running]); // keep both in dep list
 
   /* ────────────────────────── helpers ─────────────────────────── */
   /** full clean-up of the previous session */

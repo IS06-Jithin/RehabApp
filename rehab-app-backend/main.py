@@ -2,6 +2,8 @@ import math, time, sqlite3, statistics
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
+from collections import deque, Counter
+from typing import List, Optional, Union
 
 import numpy as np
 import torch, torch.nn as nn, torch.nn.functional as F
@@ -111,7 +113,12 @@ JOINT_TRIPLETS = {
 
 SEQ_LEN = 16
 IN_DIM = N_JOINTS * 3
-TH_ERR_DEG = 10  # threshold for joint‑angle advice
+TH_ERR_DEG = 8  # joint-angle advice cut-off
+TH_EX_CONF = 0.65  # exercise-mismatch confidence
+TH_Q_WRONG = 0.60  # wrong-form confidence
+BUF_SIZE = 5  # temporal stabilisation window
+IDX_CORRECT = 1  # index mapping in logits_q
+IDX_WRONG = 0
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Model definition (same architecture as trainer)────────────────────────────────
@@ -213,12 +220,25 @@ def build_advice(errs: np.ndarray) -> str:
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
 
-    # session-level accumulators for KPIs
     correct_reps = 0
     wrong_reps = 0
     per_joint_sum = np.zeros(len(ERR_JOINTS), np.float32)
     per_joint_n = 0
     start_ts = time.time()
+
+    # ★ ADDED: temporal-stabilisation buffers
+    state_buf: deque[str] = deque(maxlen=BUF_SIZE)
+    stable_state: Optional[str] = None  # "good" | "bad_form" | "wrong_ex" | None
+
+    def decide_state(ex_match: bool, prob_wrong: float) -> str:
+        if not ex_match:
+            return "wrong_ex"
+        return "bad_form" if prob_wrong >= TH_Q_WRONG else "good"
+
+    def majority_state(buf: deque) -> Optional[Union[int, str]]:
+        cnt = Counter(buf)
+        return cnt.most_common(1)[0][0] if cnt else "good"
+
     while True:
         try:
             msg = await ws.receive_json()
@@ -226,7 +246,6 @@ async def websocket_endpoint(ws: WebSocket):
             break  # client closed
 
         if msg.get("label") == "stop":
-            # ─ send session summary and close ─
             mean_joint_err = (per_joint_sum / max(1, per_joint_n)).tolist()
             await ws.send_json(
                 {
@@ -255,37 +274,54 @@ async def websocket_endpoint(ws: WebSocket):
         with torch.no_grad():
             log_q, err_hat, log_ex = model(seq, ex1)
 
-        q_pred = log_q.argmax(1).item()
-        ex_pred = log_ex.argmax(1).item() + 1
+        # ───────── probabilities & predictions ─────────
+        prob_q = torch.softmax(log_q, dim=-1)[0]
+        prob_ex = torch.softmax(log_ex, dim=-1)[0]
 
+        ex_pred = int(prob_ex.argmax().item()) + 1
+        ex_conf = float(prob_ex[ex_pred - 1])
+        ex_match = (ex_pred == exid) or (ex_conf < TH_EX_CONF)
+
+        prob_wrong = float(prob_q[IDX_WRONG])  # idx-0 == wrong
         errs_abs = np.abs(err_hat.squeeze().cpu().numpy())
 
-        if ex_pred != exid:
-            fb = f"Wrong exercise! Looks like {EXERCISE_MAP.get(ex_pred,'')}."
-            sug = ""
-        else:
-            if q_pred == 1:
-                fb, sug = "You're on the right track!", ""
+        # ───────── temporal stabilisation ─────────
+        instant_state = decide_state(ex_match, prob_wrong)
+        state_buf.append(instant_state)
+        new_stable = majority_state(state_buf)
+        state_changed = new_stable != stable_state and state_buf.count(new_stable) >= (
+            BUF_SIZE // 2 + 1
+        )
+        if state_changed:
+            stable_state = new_stable
+            if stable_state == "good":
                 correct_reps += 1
-            else:
-                fb, sug = "You're doing it wrongly!", build_advice(errs_abs)
+            elif stable_state == "bad_form":
                 wrong_reps += 1
 
-        avg_dev = float(errs_abs.mean())
-        # ───────── histogram logic ─────────
-        track = (time.time() - start_ts) >= 10.0  # 10 sec warm up delay
-        if track and (ex_pred == exid) and (q_pred == 0):  # keep gate
+        # ───────── feedback text  (uses stable_state) ─────────
+        if stable_state == "wrong_ex":
+            fb = f"Wrong exercise! Looks like {EXERCISE_MAP.get(ex_pred, '')}."
+            sug = ""
+        elif stable_state == "bad_form":
+            fb = "You're doing it wrongly!"
+            sug = build_advice(errs_abs)
+        else:  # "good"
+            fb = "You're on the right track!"
+            sug = ""
+
+        # ───────── histogram logic (unchanged) ─────────
+        track = (time.time() - start_ts) >= 10.0
+        if track and ex_match and stable_state == "bad_form":
             per_joint_sum += errs_abs
             per_joint_n += 1
 
-        avg_dev = float(errs_abs.mean())
         mean_so_far = (
             (per_joint_sum / per_joint_n).tolist()
             if per_joint_n
             else [0.0] * len(ERR_JOINTS)
         )
 
-        # top-3 joints for *this* frame (used by UI)
         mean_now = per_joint_sum / max(1, per_joint_n)
         top3_idx = np.argsort(mean_now)[::-1][:3]
         top3_labels = [JOINT_LABELS[i] for i in top3_idx]
@@ -295,11 +331,11 @@ async def websocket_endpoint(ws: WebSocket):
                 "type": "progress",
                 "feedback": fb,
                 "suggestion": sug,
-                "avg_error": avg_dev,
+                "avg_error": float(errs_abs.mean()),
                 "correct": correct_reps,
                 "total": correct_reps + wrong_reps,
-                "joint_errors": errs_abs.tolist(),  # window
-                "joint_errors_mean": mean_so_far,  # average
+                "joint_errors": errs_abs.tolist(),
+                "joint_errors_mean": mean_so_far,
                 "top_joints": top3_labels,
             }
         )
