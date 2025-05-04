@@ -218,7 +218,7 @@ async def websocket_endpoint(ws: WebSocket):
     wrong_reps = 0
     per_joint_sum = np.zeros(len(ERR_JOINTS), np.float32)
     per_joint_n = 0
-
+    start_ts = time.time()
     while True:
         try:
             msg = await ws.receive_json()
@@ -257,7 +257,8 @@ async def websocket_endpoint(ws: WebSocket):
 
         q_pred = log_q.argmax(1).item()
         ex_pred = log_ex.argmax(1).item() + 1
-        errs = err_hat.squeeze().cpu().numpy()
+
+        errs_abs = np.abs(err_hat.squeeze().cpu().numpy())
 
         if ex_pred != exid:
             fb = f"Wrong exercise! Looks like {EXERCISE_MAP.get(ex_pred,'')}."
@@ -267,12 +268,27 @@ async def websocket_endpoint(ws: WebSocket):
                 fb, sug = "You're on the right track!", ""
                 correct_reps += 1
             else:
-                fb, sug = "You're doing it wrongly!", build_advice(errs)
+                fb, sug = "You're doing it wrongly!", build_advice(errs_abs)
                 wrong_reps += 1
 
-        per_joint_sum += np.abs(errs)
-        per_joint_n += 1
-        avg_dev = float(np.mean(np.abs(errs)))
+        avg_dev = float(errs_abs.mean())
+        # ───────── histogram logic ─────────
+        track = (time.time() - start_ts) >= 20.0
+        if track and (ex_pred == exid) and (q_pred == 0):  # keep gate
+            per_joint_sum += errs_abs
+            per_joint_n += 1
+
+        avg_dev = float(errs_abs.mean())
+        mean_so_far = (
+            (per_joint_sum / per_joint_n).tolist()
+            if per_joint_n
+            else [0.0] * len(ERR_JOINTS)
+        )
+
+        # top-3 joints for *this* frame (used by UI)
+        mean_now = per_joint_sum / max(1, per_joint_n)  
+        top3_idx = np.argsort(mean_now)[::-1][:3]  
+        top3_labels = [JOINT_LABELS[i] for i in top3_idx]
 
         await ws.send_json(
             {
@@ -282,6 +298,9 @@ async def websocket_endpoint(ws: WebSocket):
                 "avg_error": avg_dev,
                 "correct": correct_reps,
                 "total": correct_reps + wrong_reps,
+                "joint_errors": errs_abs.tolist(),  # window
+                "joint_errors_mean": mean_so_far,  # average
+                "top_joints": top3_labels,
             }
         )
 

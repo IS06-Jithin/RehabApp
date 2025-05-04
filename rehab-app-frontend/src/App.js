@@ -3,16 +3,20 @@ import { Pose } from "@mediapipe/pose";
 import { Camera } from "@mediapipe/camera_utils";
 import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 import { POSE_CONNECTIONS } from "@mediapipe/pose";
-import { Pie } from "react-chartjs-2";
+import { Pie,Bar } from "react-chartjs-2";
+
 import {
   Chart as ChartJS,
   ArcElement,
   Tooltip,
   Legend,
+  CategoryScale,                                       
+  LinearScale,                                       
+  BarElement                                          
 } from "chart.js";
 import "./App.css";
 
-ChartJS.register(ArcElement, Tooltip, Legend);
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
 /* ──────────────────────────────────────────────
    constants
@@ -52,6 +56,8 @@ export default function App() {
   const [kpi,              setKpi         ] = useState({ avg:"0.0", correct:0, total:0 });
   const [sessionSummary,   setSummary     ] = useState(null);
   const [fbType, setFbType] = useState("init");
+  const [jointMean,        setJointMean   ] = useState(Array(14).fill(0));  
+  const [focusMsg,         setFocusMsg    ] = useState("");                  
 
   // Speak whenever feedback or suggestion changes
   useEffect(() => {
@@ -150,6 +156,8 @@ export default function App() {
     setSuggestion("");
     setKpi({ avg:"0.0", correct:0, total:0 });
     setSummary(null);
+    setJointMean(Array(14).fill(0));              
+    setFocusMsg("");                             
 
     /* create a brand-new WebSocket */
     wsRef.current = new WebSocket(WS_URL);
@@ -177,6 +185,13 @@ export default function App() {
           correct: d.correct,
           total  : d.total,
         });
+        /* ───  histogram data ─── */
+        if (d.joint_errors_mean) setJointMean([...d.joint_errors_mean]);   
+        if (d.top_joints) {
+          setFocusMsg(
+            `You should focus on correcting your ${d.top_joints.join(", ")} more`
+          ); 
+        } 
       } else if (d.type === "summary") {
         setSummary(d);
       }
@@ -201,6 +216,18 @@ export default function App() {
       data: [kpi.correct, Math.max(kpi.total - kpi.correct, 0)],
       backgroundColor     : ["#4caf50", "#f44336"],
       hoverBackgroundColor: ["#66bb6a", "#e57373"],
+      borderWidth: 1,
+    }],
+  };
+
+  const barData = {                                       
+    labels: [
+      "L-elbow","R-elbow","L-shoulder","R-shoulder","L-hip","R-hip",
+      "L-knee","R-knee","Spine","Head","L-wrist","R-wrist","L-ankle","R-ankle"
+    ],
+    datasets: [{
+      data: jointMean,
+      backgroundColor: "#2196f3",
       borderWidth: 1,
     }],
   };
@@ -290,6 +317,19 @@ export default function App() {
                   />
                 </div>
               )}
+              {/* ─── NEW histogram ─── */}
+              <div style={{ width:420, height:260, margin:"20px auto" }}>  
+                <Bar                                                 
+                  data={barData}                                      
+                  options={{                                         
+                    plugins:{ legend:{ display:false } },            
+                    scales : { y:{ beginAtZero:true,
+                                    title:{ text:"° deviation", display:true } } },
+                    maintainAspectRatio:false,
+                  }}
+                />                                                   
+              </div>                                               
+              {!!focusMsg && <p style={{fontWeight:600}}>{focusMsg}</p>} 
             </>
           ) : (
             <div className="chart-placeholder"><p>Your KPIs will appears here</p></div>
