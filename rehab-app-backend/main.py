@@ -228,6 +228,21 @@ async def websocket_endpoint(ws: WebSocket):
 
     # ★ ADDED: temporal-stabilisation buffers
     state_buf: deque[str] = deque(maxlen=BUF_SIZE)
+    stable_state: Optional[str] = None  # "good" | "bad_form" | "wrong_ex"
+    last_wrong_pred: Optional[int] = None  # remember culprit ex ID
+    # buffer of wrong-exercise IDs to allow fast refresh
+    wrong_id_buf: deque[int] = deque(maxlen=BUF_SIZE)
+
+    def mode(buf: deque[int]) -> Optional[int]:
+        """
+        Return the most common value if it appears ≥2 times;
+        otherwise return None (guards against a single noisy frame).
+        """
+        if not buf:
+            return None
+        val, freq = Counter(buf).most_common(1)[0]
+        return val if freq >= 2 else None
+
     stable_state: Optional[str] = None  # "good" | "bad_form" | "wrong_ex" | None
 
     def decide_state(ex_match: bool, prob_wrong: float) -> str:
@@ -286,22 +301,39 @@ async def websocket_endpoint(ws: WebSocket):
         errs_abs = np.abs(err_hat.squeeze().cpu().numpy())
 
         # ───────── temporal stabilisation ─────────
+        # ───────── temporal stabilisation ─────────
         instant_state = decide_state(ex_match, prob_wrong)
         state_buf.append(instant_state)
+
+        # ★ NEW – track wrong-exercise predictions
+        if instant_state == "wrong_ex":
+            wrong_id_buf.append(ex_pred)
+        else:
+            wrong_id_buf.clear()
+
         new_stable = majority_state(state_buf)
         state_changed = new_stable != stable_state and state_buf.count(new_stable) >= (
             BUF_SIZE // 2 + 1
         )
         if state_changed:
-            stable_state = new_stable
-            if stable_state == "good":
-                correct_reps += 1
-            elif stable_state == "bad_form":
-                wrong_reps += 1
+            stable_state = new_stable  # flip the global flag
+
+        # ★ UPDATED – update culprit whenever we are stably in wrong_ex
+        if stable_state == "wrong_ex":
+            culprit = mode(wrong_id_buf)
+            if culprit is not None:
+                last_wrong_pred = culprit
+        elif stable_state == "good":
+            correct_reps += 1
+            last_wrong_pred = None
+        elif stable_state == "bad_form":
+            wrong_reps += 1
+            last_wrong_pred = None
 
         # ───────── feedback text  (uses stable_state) ─────────
         if stable_state == "wrong_ex":
-            fb = f"Wrong exercise! Looks like {EXERCISE_MAP.get(ex_pred, '')}."
+            culprit = last_wrong_pred or ex_pred  # fall back if ever None
+            fb = f"Wrong exercise! Looks like {EXERCISE_MAP.get(culprit, '')}."
             sug = ""
         elif stable_state == "bad_form":
             fb = "You're doing it wrongly!"
