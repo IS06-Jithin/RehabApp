@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Pose } from "@mediapipe/pose";
 import { Camera } from "@mediapipe/camera_utils";
 import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
@@ -66,6 +67,7 @@ export default function App() {
   const hlRef = useRef(new Set());
   const lastSpokenRef = useRef("");     
   const speakingRef = useRef(false);    
+  
 
   /* UI state */
   const [cameraReady,      setCameraReady ] = useState(false);
@@ -77,7 +79,19 @@ export default function App() {
   const [sessionSummary,   setSummary     ] = useState(null);
   const [fbType, setFbType] = useState("init");
   const [jointMean,        setJointMean   ] = useState(Array(14).fill(0));  
-  const [focusMsg,         setFocusMsg    ] = useState("");                  
+  const [focusMsg,         setFocusMsg    ] = useState(""); 
+  const [chartKey,         setChartKey    ] = useState(0);
+
+   /* navigate/location hooks */
+  const navigate   = useNavigate();         
+  const location   = useLocation();        
+
+  /* if we returned from /summary with a pre-chosen exercise */
+ useEffect(() => {
+  if (location.state?.selectedExercise) {
+    setExercise(location.state.selectedExercise);
+    }
+  }, [location.state]);
 
   // Speak whenever feedback or suggestion changes
   useEffect(() => {
@@ -111,16 +125,21 @@ export default function App() {
   }, [suggestion, feedback, running]); // keep both in dep list
 
   /* ────────────────────────── helpers ─────────────────────────── */
-  /** full clean-up of the previous session */
-  const cleanUp = () => {
+  /**
+   * Clean-up helper.
+   * @param {boolean} closeWs – also close the WebSocket? (default true)
+   */
+  const cleanUp = (closeWs = true) => {
     cameraRef.current?.stop();
     poseRef.current?.reset?.();
-    wsRef.current?.close?.();
+    if (closeWs) wsRef.current?.close?.();          // close only if asked
     if (videoRef.current) videoRef.current.srcObject = null;
     synthRef.current.cancel();
+
     cameraRef.current = null;
     poseRef.current   = null;
-    wsRef.current     = null;
+    if (closeWs) wsRef.current = null;
+
     bufRef.current    = [];
     setCameraReady(false);
   };
@@ -197,6 +216,7 @@ export default function App() {
 
     /* reset UI */
     setRunning(true);
+    setChartKey(k => k + 1);
     setFeedback("Initialising…");
     setFbType("init"); 
     setSuggestion("");
@@ -258,19 +278,42 @@ export default function App() {
           ); 
         } 
       } else if (d.type === "summary") {
-        setSummary(d);
+        /* summary from backend → go to dashboard */
+        const kpiPack = {
+          avg    : (d.joint_errors?.length
+                     ? (d.joint_errors.reduce((a,b)=>a+b,0) /
+                        d.joint_errors.length).toFixed(1)
+                     : "0.0"),
+          correct: d.correct,
+          total  : d.total,
+        };
+
+        navigate("/summary", {
+          state:{
+            kpi        : kpiPack,
+            jointMean  : d.joint_errors ?? Array(14).fill(0),
+            selectedExercise,
+          },
+        });
+
+        /* now it's safe to close the socket and clear everything */
+        wsRef.current?.close?.();
+        wsRef.current = null;
+        cleanUp();                  // full clean-up
       }
     };
   };
 
   const stopExercise = () => {
-    /* tell backend, then clean everything */
-    wsRef.current?.readyState === 1 &&
-      wsRef.current.send(JSON.stringify({ label:"stop" }));
-    cleanUp();
+    /* tell backend to finish */
+    if (wsRef.current?.readyState === 1) {
+      wsRef.current.send(JSON.stringify({ label: "stop" }));
+    }
+
+    cleanUp(false);                 // keep WebSocket open for summary
 
     setRunning(false);
-    setFeedback("Stopped");
+    setFeedback("Stopped – preparing summary…");
     setSuggestion("");
   };
 
@@ -373,7 +416,7 @@ export default function App() {
 
               {kpi.total > 0 && (
                 <div style={{ width:220, margin:"20px auto" }}>
-                  <Pie
+                  <Pie key={`pie-${chartKey}`}
                     data={pieData}
                     options={{
                       plugins:{ legend:{ display:true, position:"bottom" } },
@@ -384,7 +427,7 @@ export default function App() {
               )}
               {/* ─── NEW histogram ─── */}
               <div style={{ width:420, height:260, margin:"20px auto" }}>  
-                <Bar                                                 
+                <Bar key={`bar-${chartKey}`}                                                  
                   data={barData}                                      
                   options={{                                         
                     plugins:{ legend:{ display:false } },            
