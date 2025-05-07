@@ -1,4 +1,4 @@
-/* === SummaryPage.jsx (final) === */
+/* === SummaryPage.jsx === */
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Pie, Bar } from "react-chartjs-2";
@@ -37,6 +37,7 @@ export default function SummaryPage() {
   const kpi = state?.kpi ?? { avg: "0.0", correct: 0, total: 0 };
   const jointMean = state?.jointMean ?? Array(14).fill(0);
   const lastExId = state?.selectedExercise ?? 1;
+  const focusMsg  = state?.focusMsg ?? "";
 
   /* --- chart datasets --- */
   const pieData = {
@@ -120,6 +121,10 @@ export default function SummaryPage() {
           }}
         />
       </div>
+      {/* top-joint advice */}
+      {focusMsg && (
+        <p style={{ fontWeight: 600, marginTop: 10 }}>{focusMsg}</p>
+      )}
 
       {/* start over */}
       <button

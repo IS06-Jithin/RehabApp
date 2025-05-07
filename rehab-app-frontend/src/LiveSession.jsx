@@ -1,3 +1,4 @@
+/* === LiveSssion.jsx === */
 import { useRef, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Pose } from "@mediapipe/pose";
@@ -66,7 +67,8 @@ export default function App() {
   const synthRef = useRef(window.speechSynthesis);
   const hlRef = useRef(new Set());
   const lastSpokenRef = useRef("");     
-  const speakingRef = useRef(false);    
+  const speakingRef = useRef(false);  
+  const focusMsgRef     = useRef("");  
   
 
   /* UI state */
@@ -273,9 +275,9 @@ export default function App() {
         /* ───  histogram data ─── */
         if (d.joint_errors_mean) setJointMean([...d.joint_errors_mean]);   
         if (d.top_joints) {
-          setFocusMsg(
-            `You should focus on correcting your ${d.top_joints.join(", ")} more`
-          ); 
+          const msg = `You should focus on correcting your ${d.top_joints.join(", ")} more`;
+          setFocusMsg(msg);          // for live UI (if ever re-enable it there)
+          focusMsgRef.current = msg; // ← keep the latest value for summary page 
         } 
       } else if (d.type === "summary") {
         /* summary from backend → go to dashboard */
@@ -293,6 +295,7 @@ export default function App() {
             kpi        : kpiPack,
             jointMean  : d.joint_errors ?? Array(14).fill(0),
             selectedExercise,
+            focusMsg : focusMsgRef.current,
           },
         });
 
@@ -437,7 +440,7 @@ export default function App() {
                   }}
                 />                                                   
               </div>                                               
-              {!!focusMsg && <p style={{fontWeight:600}}>{focusMsg}</p>} 
+              {/* {!!focusMsg && <p style={{fontWeight:600}}>{focusMsg}</p>}  */}
             </>
           ) : (
             <div className="chart-placeholder"><p>Your KPIs will appears here</p></div>
