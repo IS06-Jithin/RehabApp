@@ -28,7 +28,7 @@ RehabApp is an end-to-end research prototype that:
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Quick Start (Running the Application)
 
 1.  **Clone the repository:**
     ```bash
@@ -43,8 +43,7 @@ RehabApp is an end-to-end research prototype that:
 
 3.  **Access the application:**
     Once the build is complete and containers are running:
-    *   **FastAPI Docs (Backend):** [http://localhost:8000/docs](http://localhost:8000/docs)
-    *   **React Client (Frontend):** [http://localhost:5173](http://localhost:5173) (allow webcam access when prompted)
+    *   **React Client (Frontend):** [http://localhost:5173](http://localhost:3000) (allow webcam access when prompted)
 
 ---
 
