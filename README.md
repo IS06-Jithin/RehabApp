@@ -33,3 +33,19 @@ Original, unmodified dataset: **REHAB24-6** (Černek *et al.*, 2024)
 git clone https://github.com/IS06-Jithin/RehabApp.git
 cd RehabApp
 docker-compose up --build
+
+
+Prerequisites
+Requirement	How to install / use
+Docker & Docker Compose	Windows / macOS — install Docker Desktop from https://www.docker.com/products/docker-desktop
+Linux — install the Docker Engine and the docker-compose plugin from your distro’s repo or follow the official guide.
+Git	https://git-scm.com/downloads
+(Optional) NVIDIA driver + CUDA	Only required if you want to benchmark the model on GPU; CPU inference works out of the box.
+
+After the first build completes:
+
+FastAPI docs → http://localhost:8000/docs
+
+React client → http://localhost:5173  (grant webcam permission when prompted)
+
+<!-- ---------- END RAW MARKDOWN SNIPPET ---------- -->
