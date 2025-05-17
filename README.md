@@ -28,7 +28,6 @@ RehabApp is an end-to-end research prototype that:
 | **`rehab-app-backend/`**                                 | FastAPI service (`main.py`, model loader, SQLite storage, Dockerfile)          |
 | **`rehab-app-frontend/`**                                | React client (pose capture, WebSocket, dashboard UI)                           |
 | **`docker-compose.yml`**                                 | One-shot build & launch for both apps                                          |
-| **`.gitignore`**                                         | Ignores editor caches (`.vscode/`, `.qodo/`, etc.)                              |
 
 **Original Dataset:** **REHAB24-6** (Černek *et al.*, 2024) available at <https://zenodo.org/records/13305826>
 
