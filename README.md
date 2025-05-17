@@ -6,7 +6,7 @@
 
 | Module | Highlights |
 |--------|------------|
-| **Data prep & augmentation** | Jupyter notebook and helper scripts that clean the original **REHAB24-6** corpus and generate augmented training windows. |
+| **Data prep & augmentation** | Jupyter notebook that clean the original **REHAB24-6** corpus and generate augmented training windows. |
 | **PoseQualityNet-KP** | A 3-head CNN + Bi-LSTM that predicts exercise ID, repetition quality, and 14 joint-angle errors—only 3.4 M parameters. |
 | **Training • Evaluation • Ablation** | Notebook that reproduce all reported metrics and architecture variants. |
 | **RehabApp** | Deployable application &mdash; FastAPI back-end, React front-end, SQLite persistence, Docker-compose one-liner. |
