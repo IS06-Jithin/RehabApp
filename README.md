@@ -10,7 +10,7 @@
 | **PoseQualityNet-KP** | A 3-head CNN + Bi-LSTM that predicts exercise ID, repetition quality, and 14 joint-angle errors—only 3.4 M parameters. |
 | **Training • Evaluation • Ablation** | Notebooks and Python scripts that reproduce all reported metrics and architecture variants. |
 | **RehabApp** | Deployable application &mdash; FastAPI back-end, React front-end, SQLite persistence, Docker-compose one-liner. |
-| **Docs & assets** | Diagrams, demo GIFs, and step-by-step usage guides. |
+| **Docs & assets** | Techincal Report, Presentation and step-by-step usage guides. |
 
 **RehabApp** is an end-to-end AI physiotherapy coach that turns an ordinary webcam into a real-time form-correction assistant.  
 This repository bundles everything you need—from data preparation to a deployable FastAPI + React stack.
