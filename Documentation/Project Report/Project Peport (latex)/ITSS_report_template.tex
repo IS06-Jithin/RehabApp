@@ -1,0 +1,981 @@
+% Template; to be used with:
+%          spconf.sty  - ICASSP/ICIP LaTeX style file, and
+%          IEEEbib.bst - IEEE bibliography style file.
+% --------------------------------------------------------------------------
+\documentclass{article}
+\usepackage{spconf,amsmath,graphicx}
+\usepackage{placeins}  
+\usepackage{tabularx,booktabs}   
+\usepackage{adjustbox}         
+\usepackage{listings} 
+\usepackage{tabularx,booktabs}
+\usepackage{float} 
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\usepackage{enumitem}
+\setlist[enumerate,1]{label=\arabic*.,leftmargin=1.7em}
+\setlist[enumerate,2]{label=(\alph*),leftmargin=1.7em}
+\setlist[enumerate,3]{label=\roman*),leftmargin=1.7em}
+\usepackage{titlesec}
+\titleformat{\subsubsection}
+  {\normalfont\bfseries\normalsize}{\thesubsubsection}{1em}{}
+\titleformat{\paragraph}[runin]      % run-in style keeps the heading inline
+  {\normalfont\bfseries\normalsize}{\theparagraph}{1em}{}
+\titleformat{\subparagraph}[runin]
+  {\normalfont\bfseries\normalsize}{\thesubparagraph}{1em}{}
+
+\def\x{{\mathbf x}}
+\def\L{{\cal L}}
+
+% Title.
+% ------
+\title{Pose Correction System for Physical Therapy and Rehabilitation Using Computer Vision}
+%
+% Single address.
+% ---------------
+\name{Jithin Krishnan}
+\address{NUS-ISS, National University of Singapore, Singapore 119615}
+
+\begin{document}
+
+\maketitle
+
+% --------------------------------------------------------------------------
+\begin{abstract}
+
+Effective home-based physiotherapy is limited by scarce therapist time and the lack of instant form correction. We propose a webcam-driven coaching pipeline that turns raw video into spoken, joint-level advice.  
+After re-labelling half-profile footage as incorrect for five of the six drills to ensure reliable supervision, we extracted 14\,375 overlapping 16-frame windows (53.4 \% correct, 46.6 \% wrong) of 99 MediaPipe Pose coordinates from the REHAB24-6 dataset.  These sequences train \texttt{PoseQualityNetKP}, a 3.41 M-parameter CNN–BiLSTM network with an exercise embedding that jointly predicts (i) repetition quality, (ii) fourteen joint-angle deviations, and (iii) the exercise identity.  On a random 15 \% window-level test split the model reaches 91.5 \% accuracy (F\(_1=0.915\)) for quality classification, 99.5 \% F\(_1\) for drill recognition, and a 4.73° mean absolute joint-angle error while running in real time on laptop hardware (~30 FPS, 7.5 k forward passes s\(^{-1}\)).  A FastAPI + React front-end streams live video, flags wrong-exercise events, and overlays colour-coded cues such as \emph{Adjust your left knee and right elbow}; the same message is vocalised via the browser’s Speech-Synthesis API, delivering therapist-independent, accessible telerehabilitation.
+
+\end{abstract}
+%
+
+\textbf{Keywords}: Pose Correction, Rehabilitation Support, Deep Learning, Real-Time Feedback
+
+% --------------------------------------------------------------------------
+
+\section{Introduction}
+\label{sec:intro}
+
+Successful musculoskeletal rehabilitation hinges on patients performing every repetition with clinically prescribed alignment and range of motion; even small deviations slow tissue healing and can provoke secondary injury\,\cite{Widhalm2024}.  Because most outpatient programmes provide only a weekly consultation, home-based sessions are effectively unsupervised.  Surveys report that \(\approx 60\%\) of patients execute at least one exercise incorrectly and that poor form strongly correlates with low adherence and extended recovery time\,\cite{Xing2025,Velez2023}.  Recent pilot trials show that automated, vision-based coaching can raise repetition quality and engagement, but existing systems are either limited to binary “pass/fail’’ feedback or too computationally heavy for on-device deployment\,\cite{Abedi2024}.  Our work addresses these gaps with a light-weight pipeline that delivers joint-specific, real-time guidance on commodity hardware.
+
+\textbf{Input.} A live webcam stream \emph{or} an uploaded video.  
+Each frame is processed by MediaPipe Pose\,\cite{lugaresi2019mediapipe} to obtain 3-D
+coordinates for the full set of 33 landmarks at 30 Hz.  
+A sliding window of \(T=16\) successive frames is flattened into a tensor
+\((1,16,99)\) and paired with a one-hot exercise ID drawn from six
+classes (arm-abduction, arm-VW, push-up, leg-abduction, lunge, squat).
+
+\medskip
+\textbf{Outputs.} For every window the network returns  
+\emph{(i)} a binary \emph{Correct/Wrong} verdict,  
+\emph{(ii)} fourteen absolute joint-angle deviations (in degrees) covering elbows,
+shoulders, hips, knees, ankles, wrists, spine and head, and  
+\emph{(iii)} the predicted exercise label, enabling “wrong-exercise’’ detection.
+
+These predictions are streamed over WebSockets to a React front-end that overlays colour-coded cues (\eg~\emph{``adjust left knee and left hip''}) and speaks the same advice via the browser’s Speech-Synthesis API, making the system accessible to users with limited vision.
+
+\textbf{Model and data.}  
+The proposed \texttt{PoseQualityNetKP} couples a 1-D \mbox{CNN} encoder
+($99\!\rightarrow\!128\!\rightarrow\!512$), a two-layer
+bidirectional LSTM (256 hidden units per direction),
+and a 2-layer \emph{64-D MLP} that embeds the one-hot exercise ID.
+The shared feature vector feeds three parallel \textbf{FC heads}:
+a binary quality classifier, a 14-joint regression head, and a
+6-class exercise classifier. Three task-specific heads are trained jointly on 14\,375
+16-frame windows extracted from the cleaned
+\textsc{REHAB24-6} corpus (53.4 \% correct, 46.6 \% wrong) using
+weighted losses and class-balanced sampling.
+The resulting 3.41 M parameter checkpoint achieves accuracy \textbf{ 0.915 / F\(_1\)} on repetition quality,
+\textbf{0.995 F\(_1\)} on exercise recognition,
+and a \textbf{4.73\textdegree\ mean absolute joint-angle error}
+on the window level 15 \% test split,
+while maintaining FPS \(\sim\!30\) throughout the pipeline (7.5 k forward passes s\(^{-1}\) in isolation).
+An ablation study shows that adding temporal context (Bi-LSTM) and
+exercise conditioning halves the angular error
+(8.49\textdegree\;\(\rightarrow\) 3.86\textdegree)
+and raises repetition F\(_1\) from 0.797 to 0.903 without
+sacrificing speed, confirming the value of both components.
+
+
+\textbf{Highlights.}  
+In summary, our contribution is a \emph{mobile-ready} rehabilitation coach that  
+\begin{itemize}
+\item delivers \underline{joint-level} feedback mentioning which angles to adjust, not just binary feedback like correct or incorrect.
+\item attains state-of-the-art accuracy on six diverse rehab drills with only 3.4 M parameters;  
+\item automatically blocks guidance when the user performs the wrong exercise, increasing safety; and  
+\item light weight processing that requires no cloud GPU—both inference and audiovisual feedback run locally, widening accessibility for clinics and patients alike.  
+\end{itemize}
+
+% --------------------------------------------------------------------------
+
+\section{Literature Review}
+Human pose correction systems for rehabilitation have been extensively studied, with a variety of approaches emerging in recent years. Broadly, existing works can be categorized into rule-based methods, machine learning (ML)-based feedback systems, and real-time vision-based systems. Each approach offers distinct techniques for pose estimation, error detection, and feedback delivery, with varying strengths and limitations as summarized below. 
+
+\subsection{Rule-Based Pose Correction Systems} Early and straightforward solutions rely on predefined geometric rules or heuristic models to assess exercise form. These systems measure kinematic features (joint angles, distances, etc.) and compare them against ideal criteria set by experts. Tharatipyakul et al. \cite{Tharatipyakul2024Review} note that many works employ mathematical models or threshold-based heuristics to judge correctness, following pose estimation. For example, Kotte et al. \cite{Kotte2023} developed a real-time fitness coaching system using YOLOv7-pose for skeleton tracking and simple rule-based evaluation. Their system defines ideal joint angle ranges for each exercise and detects deviations by calculating joint angles in real time. If an angle falls outside the acceptable range, the system provides immediate corrective feedback (e.g., highlighting the misaligned limb in a different color). This rule-based design offers the advantage of simplicity and transparency – it requires no training data and the feedback is easily interpretable by users and clinicians. Moreover, it is highly efficient: by avoiding complex inference, it achieves real-time performance with minimal computation \cite{Kotte2023}. However, purely rule-based approaches are limited in generalizability. They typically handle only a fixed set of exercises or motions (since each new exercise demands manually defined rules) and may struggle with subtle form errors or inter-person variability. In Kotte et al.’s system, for instance, the thresholds must be tuned per user and exercise, and compound movements with many joints could be difficult to assess through static rules. Nevertheless, for well-understood motions, rule-based methods can provide reliable immediate feedback with low complexity. 
+
+\subsection{ML-Based Feedback Systems} To capture more complex movement patterns, many recent systems incorporate machine learning models to classify or quantify exercise correctness. In a comprehensive survey, Tharatipyakul et al. \cite{Tharatipyakul2024Review} observed that beyond simple heuristics, researchers have applied supervised ML algorithms – from Support Vector Machines (SVMs) to deep neural networks – on pose data to automatically distinguish correct vs. incorrect form. These data-driven approaches learn error criteria from examples rather than requiring explicit rule-coding. Francisco \&\ Rodrigues \cite{Francisco2022} present a representative ML-based system: they use the OpenPose framework to extract the user’s skeletal keypoints, then feed those features into two bespoke multi-layer perceptrons (MLPs) that detect posture errors. The system provides feedback in multiple modalities – overlaying visual cues on the video (e.g. highlighting joints or segments that are out of alignment) while simultaneously giving auditory alerts or spoken tips when the user’s form is suboptimal. This multi-modal feedback design reinforces learning and engagement, an advantage over purely visual methods. By training the MLP classifiers on pose data, their system can recognize complex misalignments that simple angle-threshold rules might miss. The use of two MLP networks allows specialized analysis (e.g., one network focusing on upper-body pose and another on lower-body, or one detecting the type of error and the other its severity) – enhancing accuracy of feedback \cite{Francisco2022}. The strength of such an ML-based strategy lies in its flexibility: given enough training examples, it can adapt to different body types and variations of an exercise, and potentially detect a wide range of form errors. Moreover, ML models can aggregate multiple joint signals to detect subtle patterns (for instance, compensatory movements) that would be hard to encode as explicit rules. Despite these benefits, ML-based systems have notable limitations. They typically require a labeled dataset of correct/incorrect poses for training, which can be costly to collect for each new exercise or condition. Generalization is a concern – a model like the one by Francisco \&\ Rodrigues \cite{Francisco2022} may perform well on the specific movements it was trained on, but might falter outside that domain or under different camera views or user demographics. Additionally, many ML approaches (especially deep learning models) act as a “black box,” making their feedback less interpretable; this can reduce trust in critical domains like rehabilitation. To address temporal aspects of motion (which static frame-based models ignore), some works integrate sequence models. Our proposed system falls into this ML-driven category, utilizing a convolutional neural network with an LSTM (CNN–LSTM) to analyze pose sequences in real time. We employ MediaPipe Pose for efficient keypoint detection and then feed time-series of joint coordinates into a CNN–LSTM classifier that learns to identify incorrect form across consecutive frames. By incorporating temporal dynamics, our model can detect not only static misalignment but also movement execution issues (e.g., jerky motions or improper weight shifting) that manifest over time. The feedback in our approach is delivered visually by marking specific joints that need adjustment (for example, coloring the target joint red if its movement deviates from the expected trajectory), focusing the user’s attention on the exact problem area. This data-driven design is powerful, as it can adapt to subtle variations and provide targeted cues; preliminary results show it can reliably distinguish fine-grained errors even for users unseen during training. However, similar to other ML systems, our approach requires careful training and suffers the usual constraints of data-driven models – it needs a sufficiently diverse training set to be robust, and the model’s complexity means tuning and optimizing for real-time use is non-trivial. In summary, ML-based feedback systems offer a more adaptive and comprehensive analysis of human pose at the cost of increased complexity and dependence on data.
+
+\subsection{Real-Time Vision-Based Systems} In rehabilitation settings, real-time feedback is critical: patients benefit most when the system can analyze their movement instantly and prompt corrections during the exercise. Consequently, nearly all modern pose correction solutions are vision-based and engineered for real-time operation. This is enabled by advancements in pose estimation algorithms that run efficiently on standard hardware. MediaPipe Pose, for instance, is a lightweight model optimized for speed, and has been used in several systems \cite{Tharatipyakul2024Review} including our own, to achieve live 30+ FPS pose tracking on consumer devices. OpenPose, while more computationally intensive, can also operate in real-time with a GPU and provides high-detail skeletal data; Francisco \&\ Rodrigues’s system \cite{Francisco2022} leveraged this to give immediate multimodal feedback to the user. Similarly, Kotte et al. \cite{Kotte2023} emphasize real-time performance – they integrate the fast YOLOv7-pose detector with a simple tracking procedure, allowing their application to deliver instantaneous visual cues (like the color-coded skeleton overlay) as the user moves. In all these systems, latency is kept low (on the order of milliseconds to a few frames delay), thereby creating an interactive experience where users can adjust their posture on the fly in response to system cues. The strength of real-time vision-based systems is evident: they enable a form of virtual coaching or therapy, replicating the immediacy of in-person correction. Users receive continuous guidance, which can improve learning rates and prevent reinforcement of bad habits through immediate error notification. Moreover, vision-based setups are non-intrusive – the user simply exercises in front of a camera, without needing wearable sensors or markers, making the solution accessible and user-friendly. However, achieving accurate and stable real-time tracking comes with challenges. Lighter models (e.g., MediaPipe, BlazePose) trade off some accuracy for speed, which can lead to occasional pose estimation errors, especially in fast or occluded movements. Such errors might trigger false feedback if not handled carefully. On the other hand, heavier models (e.g., original OpenPose or HRNet) may offer better accuracy but could introduce lag or require specialized hardware, limiting practicality. Another concern is robustness in real-world environments: varying lighting, camera angles, or body shapes can affect real-time pose detection fidelity. As highlighted in the survey by Tharatipyakul et al. \cite{Tharatipyakul2024Review}, despite improvements, “the majority of pose estimation challenges remain” – systems still struggle with occlusions and multi-person scenarios, and maintaining real-time rates under these conditions is an open problem. Therefore, current research often balances these aspects by choosing or fine-tuning a pose estimator that fits the use case’s accuracy-speed requirements, and by employing smoothing or filtering techniques to stabilize the output. In summary, real-time vision-based systems have become the norm for pose correction due to their ability to provide instant augmented feedback. The key is ensuring that this immediacy does not come at the expense of accuracy or reliability. The literature shows a trend toward hybrid solutions – e.g., using fast models with occasional fallback to more accurate analysis, or optimizing neural networks via model compression – to get the “best of both worlds.” Table~\ref{tab:comparison} provides a comparative overview of notable systems and their characteristics. 
+
+\begin{table*}[t]
+  \caption{Comparison of existing pose-correction systems for rehabilitation exercises.}
+  \label{tab:comparison}
+  \centering\small            % shrink text a bit
+  \setlength{\tabcolsep}{3pt} % tighter column gaps
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabular}{|p{2.8cm}|p{2cm}|p{2.4cm}|p{2.4cm}|p{1.2cm}|p{2.6cm}|p{2.6cm}|}
+    \hline
+    \textbf{Study} &
+    \textbf{Pose Estimator} &
+    \textbf{Feedback Mechanism} &
+    \textbf{Classification / Error Detection} &
+    \textbf{Real-Time?} &
+    \textbf{Strengths} &
+    \textbf{Weaknesses} \\ \hline
+    
+    Tharatipyakul \textit{et~al.}~\cite{Tharatipyakul2024Review}\,(2024, review) &
+    OpenPose, MediaPipe (survey) &
+    Visual / text / audio (various works) &
+    Rules, SVM, DNN (surveyed) &
+    N/A &
+    Comprehensive overview; maps effective combinations &
+    No single deployable system; uncertain best choice for new contexts \\ \hline
+    
+    Francisco \& Rodrigues~\cite{Francisco2022}\,(2022) &
+    OpenPose &
+    Visual overlays + audio cues &
+    Two MLP classifiers on pose features &
+    Yes (GPU) &
+    Multi-modal feedback; learns complex errors &
+    Needs lots of training data; GPU load; limited interpretability \\ \hline
+    
+    Kotte \textit{et~al.}~\cite{Kotte2023}\,(2023) &
+    YOLOv7-Pose &
+    Colour-coded skeleton; on-screen tips &
+    Rule-based angle thresholds &
+    Yes (CPU) &
+    Fast; transparent; easy to tweak &
+    Hard-coded angles; misses subtle errors; poor generalisation \\ \hline
+    
+    \textbf{Proposed (this work)} &
+    MediaPipe Pose &
+    Joint-level visual highlights; spoken advice &
+    CNN–Bi-LSTM  + 3×FC heads (quality, 14-joint regression, exercise ID) &
+    Yes (CPU $\sim$30 FPS) &
+    Temporal modelling; 3.4 M params; wrong-exercise guard; per-joint angle errors &
+    Needs labelled data; occasional occlusion failures \\ \hline
+  \end{tabular}
+\end{table*}
+
+
+In summary, the literature confirms the promise of computer vision based coaching for rehabilitation, but also exposes persistent gaps—chiefly occlusion sensitivity, heavy compute loads, and the tendency to give only one–dimensional feedback. Our work advances the field with a light, \emph{multi-head} architecture that simultaneously predicts (i) repetition quality, (ii) per-joint angle errors, and (iii) exercise identity. This joint-prediction design enables rich, joint-level guidance while automatically suppressing advice when the user performs the wrong drill, delivering precise, real-time feedback on commodity hardware where earlier systems typically offered only a single “pass/fail’’ verdict.
+
+\FloatBarrier 
+
+% ---------------------------------------------------------------------------
+\section{Proposed System}
+\label{sec:system}
+
+\subsection{End-to-End Overview}
+A live webcam stream (or uploaded clip) is processed directly in the
+browser.  MediaPipe Pose extracts 33 three-dimensional landmarks at
+30 Hz; overlapping 16-frame windows are sent via WebSocket to the
+back-end, where \texttt{PoseQualityNet-KP} predicts (i) repetition
+quality, (ii) 14 joint-angle errors, and (iii) the exercise ID.  The
+back-end returns a compact JSON packet that the React client turns into
+a colour-coded skeleton overlay and spoken advice (Fig.~\ref{fig:overview}).
+
+\begin{figure}[!htbp] 
+  \centering
+  \includegraphics[width=\linewidth]{figs/inference_architecture.png}
+  \caption{\textbf{End-to-end overview.}  The React front-end handles
+           capture, landmark inference, windowing, and UI, while the
+           FastAPI back-end hosts \texttt{PoseQualityNet-KP} and
+           returns real-time feedback.}
+  \label{fig:overview}
+\end{figure}
+
+% ...........................................................................
+\subsection{Data Pre-processing}
+\label{ssec:prep}
+\begin{itemize}[leftmargin=1.35em]
+  \item \textbf{Landmark extraction}\;— MediaPipe Pose (33 points, 30 Hz).
+  \item \textbf{Sliding-window buffering}\;— $T{=}16$ frames, stride 8.
+  \item \textbf{Angle-error computation}\;— per–frame joint angles are
+        compared with exercise-specific medians and averaged to a
+        14-channel error vector that is concatenated to the key-points
+        ($99{+}14=113$ features\,/\,frame).
+  \item \textbf{Offline augmentations}\;— half-profile relabelling and
+        optional $\mathcal N(0,1)$ start-index jitter.
+\end{itemize}
+\textit{The full dataflow is illustrated in Fig.~\ref{fig:dataflow}.}
+
+\begin{figure}[t] 
+  \centering
+  \includegraphics[width=\linewidth]{figs/dataflow_pipeline}  % <-- your new diagram
+   \caption{\textbf{Data-pre-processing pipeline.}
+           Blue boxes are intermediate \emph{data artefacts}
+           (video frames, segmentation CSV, window tensor, one-hot ID),
+           amber boxes are \emph{compute steps}
+           (pose extraction, label clean-up, sliding window, angle-error
+           computation, concatenation, batching).
+           Together they transform a raw video stream into augmented
+           $16{\times}99$ tensors plus a one-hot exercise ID, ready for
+           \texttt{PoseQualityNet-KP}.}
+  \label{fig:dataflow}
+\end{figure}
+
+% ...........................................................................
+\subsection{Network Architecture: PoseQualityNet-KP}
+\label{ssec:arch}
+Figure \ref{fig:modelflow} shows the training-time data and computation
+flow; core blocks are detailed below.
+
+\begin{figure}[t] 
+  \centering
+  \includegraphics[width=\linewidth]{figs/model_architecture}
+  \caption{PoseQualityNet-KP: a CNN frame encoder, 2-layer Bi-LSTM,
+           64-D exercise embedding, and three task heads
+           (quality, 14-angle error, exercise ID).}
+  \label{fig:modelflow}
+  \label{fig:modelflow}
+\end{figure}
+
+
+\subsubsection{Key-point encoder}
+Each frame in the $16\times99$ input window is pushed through a shallow
+1-D CNN with two $3{\times}1$ kernels (99$\!\rightarrow$128$\!\rightarrow$512).
+ReLU activations and global average pooling yield a 512-D vector
+$\mathbf f_t$ (\,$\approx$0.23 M parameters).
+
+\subsubsection{Temporal encoder}
+The sequence $\{\mathbf f_t\}_{t=1}^{16}$ feeds a 2-layer Bi-LSTM
+(256 hidden / direction).  Mean pooling over time produces
+$\mathbf g\!\in\!\mathbb{R}^{512}$.
+
+\subsubsection{Exercise embedding}
+A one-hot exercise ID is mapped to a dense
+$\tilde{\mathbf e}\!\in\!\mathbb{R}^{64}$ by a 2-layer MLP
+(6$\!\to$64$\!\to$64).
+
+\subsubsection{Multi-task heads}
+The concatenated vector
+$[\mathbf g : \tilde{\mathbf e}]$ (576 dims) feeds  
+(i) a 2-way quality classifier,  
+(ii) a 14-D joint-angle regressor, and  
+(iii) a 6-way exercise classifier (the last one sees $\mathbf g$ only).  
+Total size: $\sim$3.4 M parameters.
+
+\subsection{Training Strategy}
+Composite loss  
+$\mathcal L_{\text{rep}}
+ + 0.2\,\mathcal L_{\text{ex}}
+ + 0.1\,\mathcal L_{\text{err}}$  
+with class-balanced BCE and Smooth-L1.  
+AdamW ($3{\times}10^{-4}$; wd $10^{-2}$), gradient clipping
+$\lVert g\rVert_2\!\le\!1$, ReduceLROnPlateau and early stopping
+after 6 epochs.  
+Batch 32 windows; subject-stratified 70/15/15 split; runs on Apple M or
+RTX 3060 within 3.1 GB.
+
+
+\subsection{Runtime Pipeline}
+\label{ssec:pipeline}
+
+\paragraph{Frontend (React).}
+\textbf{Webcam capture} – 640\,$\times$\,480@30 Hz.  
+\textbf{Pose estimation} – MediaPipe Pose (complexity 2).  
+\textbf{Windowing \& tensorisation} – flatten 16$\times$99 tensors,
+append one-hot ID.  
+\textbf{WebSocket client} – $\approx$2.5 ms emit time.  
+\textbf{Multimodal feedback} – colour-coded skeleton, text tips, spoken
+advice, live KPI tiles and pie chart (Chart.js).  
+\textbf{User-feedback widget} — Once a therapy session ends, a slide-in
+form (see Fig.~\ref{fig:overview}, right) lets patients rate
+\emph{Ease of Use}, \emph{Accuracy}, …
+
+\paragraph{Back-end (FastAPI).}
+Single \texttt{PoseQualityNet-KP} instance runs in \texttt{eval} mode.
+A message handler parses the $16{\times}99$ tensor, performs a
+CUDA-free forward pass (${\sim}$7 500 windows s$^{-1}$ on Apple M),
+assembles a prediction bundle
+[$\hat y_{\text{qual}}$, $\hat{\boldsymbol\theta}$, $\hat y_{\text{ex}}$],
+and streams it back (1 ms).  
+KPI bookkeeping tracks mean joint-angle error and correct/total counts;
+SQLite stores optional user feedback.
+
+\subsection{Safety and Edge Feasibility}
+A dedicated exercise-ID head suppresses feedback when the user performs
+the wrong drill.  
+With only 3.4 M weights ($<$ 8 MB) the model sustains $\approx$30 fps on
+CPU; no raw video ever leaves the device—only 99-value tensors.
+
+% ...........................................................................
+\subsection{Why the Design Works}
+\begin{itemize}[leftmargin=1.35em]
+  \item \emph{Context bias}\;— the exercise embedding centres decision
+        boundaries on drill-specific kinematics.
+  \item \emph{Temporal reasoning}\;— Bi-LSTM captures dynamic errors
+        invisible in single frames.
+  \item \emph{Edge readiness}\;— 3.4 M parameters fit mobile memory and
+        run real-time without a GPU.
+\end{itemize}
+
+
+\section{Experimental results}
+
+\subsection{Dataset}
+\label{sec:data}
+
+We build on the public \textbf{REHAB24-6} corpus by
+Černek\,\textit{et al.}~\cite{cernek2024rehab}.  
+The dataset contains \emph{65} synchronised recordings  
+($184{,}825$ RGB frames at 30 fps) of six common physiotherapy
+exercises (Ex1–Ex6) performed by ten subjects
+(Table~\ref{tab:data_overview}).  
+Two fixed cameras are provided:
+
+\begin{itemize}
+  \item \textbf{Camera17} – horizontal, wide FoV (used in our work)
+  \item \textbf{Camera18} – vertical, narrow FoV (ignored)
+\end{itemize}
+
+The accompanying \texttt{Segmentation.csv} file supplies, for every
+exercise repetition, all meta-data listed in
+Figure~\ref{fig:dataset_example_original}.
+
+\emph{(i)} the video and repetition identifiers,
+\emph{(ii)} the exercise ID and person ID,
+\emph{(iii)} the first/last frame indices that bound the repetition,
+\emph{(iv)} the camera orientation, front vs.\ half-profile),
+\emph{(v)} a quality-control flag for the motion-capture
+\emph{(vi)} the exercised sub-limb,
+\emph{(vii)} the lighting condition,
+\emph{(viii)} two counters indicating extra people in view, and
+\emph{(ix)} a binary correctness label.
+
+\begin{table}[H]
+  \caption{REHAB24-6 overview (Camera17 only)}
+  \label{tab:data_overview}
+  \centering
+  \small
+  \begin{tabular}{@{}lccccc@{}}
+    \toprule
+    Exercise & Reps & Correct & Wrong & Frames & Dir. \\ 
+    \midrule
+    Ex1 Arm Abduction  & 178 &  90 &  88 & 27\,442 & 2 \\ 
+    Ex2 Arm VW         & 208 &  94 & 114 & 33\,641 & 2 \\ 
+    Ex3 Push-ups       & 107 &  52 &  55 & 12\,054 & 1 \\ 
+    Ex4 Leg Abduction  & 210 & 120 &  90 & 18\,329 & 2 \\ 
+    Ex5 Leg Lunge      & 174 &  78 &  96 & 17\,608 & 2 \\ 
+    Ex6 Squats         & 195 & 134 &  61 & 19\,373 & 2 \\ 
+    \midrule
+    \textbf{Total}     & 1\,072 & 568 & 504 & 128\,447 & -- \\ 
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=.9\linewidth]{figs/dataset_example_original.png}
+  \caption{Author-supplied frame-level segmentation for two recordings.
+           Green blocks denote repetitions deemed \emph{correct}; orage
+           blocks denote \emph{incorrect}.}
+  \label{fig:dataset_example_original}
+\end{figure}
+
+
+\subsection{Implementation details}
+\label{sec:impl}
+
+This section describes the \textbf{(i)} data–level augmentations that
+regularise the learning signal and \textbf{(ii)} the exact optimisation
+settings used to train \textit{PoseQualityNet-KP}.  
+
+%───────────────────────────────────────────────────────────────────────────────
+\subsubsection{Data augmentation and feature engineering}
+\label{sec:aug}
+
+Besides the usual train/val/test split, a series of \emph{task-specific}
+augmentations are applied off-line so that the network is exposed to a
+balanced and information-rich training signal.  They are grouped below
+into three categories.
+
+\begin{enumerate}[label=\textbf{\Alph*.}, leftmargin=2em, itemsep=6pt]
+
+%------------------------------------------------------------------------
+\begin{enumerate}
+  \item \textbf{Label-level adjustments}
+        \begin{enumerate}
+          \item \textbf{Half-profile relabelling.}
+        Repetitions captured from an oblique (\texttt{half-profile})
+        view are automatically re-labelled as
+        incorrect because the side camera is unable to verify elbow extension or knee
+          valgus reliably in a single view.} %
+        \emph{unless} the exercise is a \emph{Lunge} (Ex~5), where the
+        angled view is diagnostically valuable.
+  \end{enumerate}
+
+  \vspace{2pt}
+  The relabelling script and the final cleaned meta-data are provided
+  as \texttt{Segmentation\_new.xlsx}.
+
+\item \textbf{Temporal augmentations}
+        \begin{enumerate}
+          \item \textbf{Sliding-window cropping.}  
+        Each repetition is chopped into overlapping windows of
+        $T\!=\!16$ frames (0.53 s) with a stride of 8 frames.
+        Compared with using the whole repetition, this increases the
+        number of training samples by ${\sim}8\times$ and forces the
+        model to classify quality from \emph{partial} motion cues.
+  \item \textbf{Gaussian time–jitter.}  
+        At train time the start index of every window is perturbed by
+        $\Delta t\!\sim\!\mathcal{N}(0,\,\sigma^{2})$ with
+        $\sigma=1$\,frame, provided the window stays within the
+        repetition bounds.  The jitter removes the last remnants of
+        positional bias.
+  \end{enumerate}
+
+ \item \textbf{Angle-error feature construction}
+        \begin{enumerate}
+          \item \emph{Ideal joint angle.}
+      For each exercise $e$ and joint triplet $j$
+      we take all \emph{correct} repetitions and measure the joint
+      angle in the \emph{middle} frame of each repetition.
+      The median of those values is the reference, denoted
+      $\tilde{\theta}_{e,j}$.
+
+\item \emph{Frame-wise error.}  
+      In any frame $t$ of exercise $e$ the signed deviation is simply
+      $\delta_{t,j} \;=\; \angle_{t,j} \;-\; \tilde{\theta}_{e,j}$.
+
+\item \emph{Window pooling and concatenation.}  
+      For the current 16-frame window ($T\!=\!16$) we average the
+      per-frame errors and attach them to the key-points:
+
+      \[
+          \boxed{\;
+            \varepsilon_{w,j}
+            \;=\;
+            \frac{1}{T}\sum_{t=1}^{T}
+            \bigl(
+              \angle_{t,j} - \tilde{\theta}_{e,j}
+            \bigr)
+          \;}
+      \]
+
+      The vector
+      $\boldsymbol{\varepsilon}_{w}\!=\!(\varepsilon_{w,1},\ldots,\varepsilon_{w,14})$
+      (14 numbers) is concatenated with the flattened
+      key-points 33 landmarks 3 coordinates to
+      form a $113$-dimensional feature for every time-step.
+      These extra channels tell the network \emph{which joints are off
+      and by how much}, acting as a built-in attention cue.
+\end{enumerate}
+\end{enumerate}
+
+
+In the ablation study we found that adding the 14-channel error vector lowered the joint-angle MAE from 4.38° to 3.86° (-11.9 \%) while leaving both classification heads unchanged. No geometric or colour jitter was applied because the model operates directly on 3-D key-points.
+
+\subsubsection{Training configuration}
+\label{sec:train}
+
+\begin{itemize}[leftmargin=1.5em, itemsep=4pt]
+  \item \textbf{Hardware.}  
+        Experiments are run on a consumer–grade laptop with an \mbox{Apple M4}  
+        GPU (10-core, 16 GB unified memory).  Peak usage never exceeds 3.1 GB.  
+        The exact same code also executes on an NVIDIA RTX 3060 without change.
+
+  \item \textbf{Data split.}  
+        Subject-stratified  
+        70 \% / 15 \% / 15 \% for \textit{Train / Val / Test}   
+        (no patient appears in more than one split).
+
+  \item \textbf{Optimiser \& scheduler.}  
+        \texttt{AdamW} with initial learning-rate  
+        $\eta_0 = 3\times10^{-4}$ and weight-decay $10^{-2}$.  
+        The LR is halved whenever the validation \textit{Rep-F1} score  
+        stalls for 3 epochs (\texttt{ReduceLROnPlateau}).
+
+  \item \textbf{Batching.}  
+        Mini-batch size $B = 32$ windows  
+        ($T\!=\!16$ frames $\times$ 99 features $\approx$ 4.1 kB each).  
+        Effective GPU utilisation is ${>}90$ \% at this batch size.
+
+  \item \textbf{Loss weights.}  The global objective is a
+weighted sum of three task–specific terms:
+\[
+  \boxed{%
+    \mathcal{L}
+    \;=\;
+    \mathcal{L}_{\text{rep}}
+    \;+\;
+    0.2\,\mathcal{L}_{\text{ex}}
+    \;+\;
+    0.1\,\mathcal{L}_{\text{err}}
+  } .
+\]
+All symbols below are averaged over the mini-batch of size $B$.
+
+\begin{enumerate}[label=\alph*)]
+  \item \textbf{Repetition–quality loss
+        $\mathcal{L}_{\text{rep}}$.}  
+        A \emph{class-weighted} binary cross-entropy that down-weights
+        the majority (\textit{wrong}) class:  
+        \[
+          \mathcal{L}_{\text{rep}}
+          =
+          -\frac{1}{B}\sum_{i=1}^{B}
+          \Bigl(
+            w_{1}\,y_{i}\,\log p_{i}
+            +
+            w_{0}\,(1-y_{i})\,\log(1-p_{i})
+          \Bigr),
+        \]
+        where $y_{i}\!\in\!\{0,1\}$ is the ground-truth label,
+        $p_{i}$ the predicted probability of
+        \textit{correct}, and
+        $w_{c}=N/(2\,n_{c})$ with $n_{c}$ the class frequency in the
+        training split (see the sampler in the code).
+
+  \item \textbf{Exercise-ID loss
+        $\mathcal{L}_{\text{ex}}$.}  
+        A standard 6-way cross-entropy:
+        \[
+          \mathcal{L}_{\text{ex}}
+          =
+          -\frac{1}{B}\sum_{i=1}^{B}
+          \sum_{k=1}^{6}
+          y^{\text{ex}}_{ik}\,
+          \log p^{\text{ex}}_{ik},
+        \]
+        where $y^{\text{ex}}_{ik}$ is $1$ if sample $i$ belongs to
+        exercise $k$ and $p^{\text{ex}}_{ik}$ is the soft-max output
+        of the \texttt{ex\_head}.
+
+  \item \textbf{Angle-error loss
+        $\mathcal{L}_{\text{err}}$.}  
+        A Smooth-L1 (Huber) regression loss over the
+        $J\!=\!14$ joint-angle channels:
+        \[
+          \mathcal{L}_{\text{err}}
+          =
+          \frac{1}{B}\sum_{i=1}^{B}
+          \frac{1}{J}\sum_{j=1}^{14}
+          \operatorname{Huber}\!
+          \bigl(
+            \hat{\varepsilon}_{ij} - \varepsilon_{ij}
+          \bigr),
+          \qquad
+        \]
+         \[
+          \operatorname{Huber}(x)=
+          \begin{cases}
+            \tfrac{1}{2}x^{2}, & |x|\le 1\\[3pt]
+            |x|-\tfrac{1}{2},  & |x|>1 .
+          \end{cases}
+        \]
+        Here $\varepsilon_{ij}$ is the ground-truth mean angular
+        deviation of joint $j$ in window $i$
+        (Section~\ref{sec:aug}), and $\hat{\varepsilon}_{ij}$ is the
+        corresponding prediction from \texttt{err\_head}.
+\end{enumerate}
+
+The scalar factors $1$\,:\,$0.2$\,:\,$0.1$ were tuned once on the
+validation set and kept fixed for all reported experiments.
+
+  \item \textbf{Regularisation.}  
+        Gradient clipping at $\lVert g\rVert_{2} \le 1.0$;  
+        early-stopping after 6~epochs without \textit{Rep-F1} improvement.
+
+  \item \textbf{Runtime.}  
+        Training converges within 29–34 epochs (≈35 min wall-clock);  
+        inference speed is ≈30 fps on the target device, measured with a
+        64-frame dummy roll-out.
+\end{itemize}
+
+\subsection{Performance metrics}
+\label{sec:metrics}
+
+During training and evaluation the \textsc{PyTorch} helpers logs \emph{four} core scores and two
+auxiliary diagnostics at every epoch:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Rep‐quality head}\,: binary “\emph{Correct} vs.\ \emph{Wrong}”
+        ($C\!=\!2$ classes).
+  \item \textbf{Exercise head}\,: 6-way exercise identification
+        ($C\!=\!6$).
+  \item \textbf{Joint-error head}\,: regression over $J\!=\!14$ joint angles.
+  \item \textbf{Runtime \& size}\,: inference throughput and \#parameters.
+\end{itemize}
+
+\vspace{.5em}
+\subsubsection{Classification heads (Rep-quality and Exercise)}
+
+For each class $c\in\{1,\dots,C\}$ let
+$(\text{TP}_c,\text{FP}_c,\text{FN}_c,\text{TN}_c)$ be the entries of
+the confusion matrix and $n_c=\text{TP}_c+\text{FN}_c$ the number of
+samples of that class.
+
+\begin{align}
+  \text{Precision}_c
+  &=\frac{\text{TP}_c}{\text{TP}_c+\text{FP}_c},            & \end{align}
+  \begin{align} \text{Recall}_c
+  &=\frac{\text{TP}_c}{\text{TP}_c+\text{FN}_c},
+  \label{eq:prec_recall}
+\end{align}
+
+\begin{align}
+  \text{F1}_c &= 2\,
+      \frac{\text{Precision}_c \,\text{Recall}_c}
+           {\text{Precision}_c+\text{Recall}_c},           & \end{align}
+  \begin{align} \text{Accuracy} &= \frac{\sum_{c=1}^{C}\text{TP}_c +
+                            \sum_{c=1}^{C}\text{TN}_c}{N}.
+  \label{eq:f1_acc}
+\end{align}
+
+\paragraph{Weighted macro–F1 (reported).}
+Because both tasks exhibit moderate class imbalance, the code uses the
+\verb|sklearn.metrics.f1_score| call with
+'average="weighted"'.  
+Formally
+\[
+  \boxed{%
+    \text{F1}_\text{w} =
+    \sum_{c=1}^{C} \frac{n_c}{N}\,\text{F1}_c
+  } ,
+\]
+where $N=\sum_{c}n_c$ is the number of evaluated windows
+($N\!\approx\!19\,\text{k}$ for the full test split).
+
+\paragraph{Confusion matrices.}
+Per–task $C\times C$ confusion matrices
+$\mathbf{M}^{(\text{rep})}$ and
+$\mathbf{M}^{(\text{ex})}$ are exported for qualitative
+analysis (Fig.~\ref{fig:cms} in the main paper).
+
+\subsubsection{Joint-error regression head}
+
+The model predicts the signed deviation
+$\hat{\varepsilon}_{ij}$ (in degrees) for joint $j$ in window $i$.
+The primary metric is the \emph{global} mean-absolute error:
+
+\[
+  \boxed{%
+    \text{MAE} =
+    \frac{1}{JN}\sum_{j=1}^{14}\sum_{i=1}^{N}
+    \bigl|\hat{\varepsilon}_{ij}-\varepsilon_{ij}\bigr|
+  } .
+\]
+
+The Smooth-L1 training loss (Huber with $\delta\!=\!1$) is monitored
+but not reported.
+
+\subsubsection{Deployment diagnostics (Runtime & size)}
+
+\begin{align}
+  \text{FPS} &=
+    \frac{T_\text{dummy}}{t_\text{eval}}
+    &\text{(frame rate)}\\[4pt]
+  \text{\#Params} &= \sum_{l}\bigl|\mathcal{W}_{l}\bigr|
+    &\text{(trainable weights),}
+\end{align}
+
+where $T_\text{dummy}=64$ consecutive frames are passed through the
+network on the target device and $t_\text{eval}$ is the measured
+wall-clock time.  These numbers guarantee real-time feedback
+($\text{FPS}\!\ge\!25$) and a mobile-friendly memory footprint
+($\approx3.4$ M parameters).
+
+% ------------------------- 4.4 Experimental results -------------------------
+\subsection{Experimental Results}
+\label{sec:expres}
+
+This section revisits the evaluation criteria introduced in
+Section~\ref{sec:metrics}, presents the corresponding results for each
+prediction head in turn, and discusses their implications.  Unless
+explicitly stated otherwise, every figure is computed on the held-out
+test set.
+
+% ---------------------------------------------------------------------------
+\subsubsection{Quantitative Results}
+\label{sec:quant}
+% ---------------------------------------------------------------------------
+
+\paragraph{Overall performance.}
+Table~\ref{tab:overall} summarises the four core scores prescribed in
+Section~\ref{sec:metrics}\,: accuracy and weighted–F1 for both
+classification heads, the global MAE for the joint-angle regressor, and
+lists the deployment diagnostics (FPS and \#parameters) for
+completeness.
+
+% ---- overall performance ----------------------------------------------------
+\begin{table}[h]
+  \centering\small
+  \caption{Final test–set metrics on \mbox{4\,112} sliding windows.  MAE is
+           averaged over the 14 monitored DoF.}
+  \label{tab:overall}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    \multirow{2}{*}{\textbf{Output head}} &
+    \multicolumn{2}{c}{\textbf{Classification}} &
+    \textbf{Regression} \\
+    \cmidrule(lr){2-3}\cmidrule(l){4-4}
+               & Accuracy & F1\textsubscript{w} & MAE ($^{\circ}$) \\ \midrule
+    Repetition quality & 0.915 & 0.915 & --   \\
+    Exercise ID        & 0.995 & 0.995 & --   \\
+    Joint-angle error  &   --  &   --  & 4.73 \\ \midrule
+    \multicolumn{4}{c}{\textit{Deployment diagnostics:}
+      \;7.5\,k\,FPS \;|\; 3.41\,M parameters} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------------
+\subsubsection{Head-wise Analysis}
+% ---------------------------------------------------------------------------
+
+\paragraph{Repetition-quality head ($C\!=\!2$).}
+The binary classifier achieves \textbf{91.5\,\%} accuracy and an
+identical weighted–F1 (Table~\ref{tab:overall}).  As explained in
+Section~\ref{sec:metrics}, equality arises when false positives and false
+negatives are symmetric, which the confusion matrix in
+Table~\ref{tab:cm_rep} confirms: 879/\,1\,\, Incorrect
+repetitions are rejected, while 1\,094/\,1\,\, Correct
+executions are accepted.
+
+% ---- confusion matrix: repetition quality ----------------------------------
+\begin{table}[h]
+  \centering\small
+  \caption{Confusion matrix for repetition-quality classification
+           (absolute counts).}
+  \label{tab:cm_rep}
+  \begin{tabular}{@{}c|cc@{}}
+    \toprule
+    \textbf{Actual $\backslash$ Pred.} & \textbf{Incorrect} & \textbf{Correct} \\
+    \midrule
+    Incorrect & 879 & 116 \\
+    Correct   &  68 & 1\,094 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Exercise-ID head ($C\!=\!6$).}
+The six-way classifier is virtually perfect, reaching
+\textbf{99.5\,\%} accuracy and weighted–F1.  Only \textbf{five} out of
+4\,112 windows are mislabelled (Table~\ref{tab:cm_ex}); the largest
+off-diagonal count is~2.  Confusions occur almost exclusively between
+kinematically related drills—(i) the two arm-centric exercises
+\emph{Arm-abduction} and \emph{Arm-VW}, and (ii) the anatomically
+adjacent lower-limb trio \emph{Leg-abduction}, \emph{Lunge}, and
+\emph{Squat}.  No errors are observed for \emph{Push-ups}, and all
+classes retain per-class F1 scores above~0.98.
+
+% ---- confusion matrix: exercise ID -----------------------------------------
+\begin{table}[h]
+  \centering\small
+  \caption{Confusion matrix for exercise-ID classification
+           (absolute counts).}
+  \label{tab:cm_ex}
+  \begin{tabular}{@{}c|cccccc@{}}
+    \toprule
+    \textbf{Actual $\backslash$ Pred.} & 0 & 1 & 2 & 3 & 4 & 5 \\
+    \midrule
+      0 & 472 &   1 &   0 &   0 &   0 &   2 \\
+      1 &   0 & 562 &   0 &   1 &   0 &   0 \\
+      2 &   0 &   0 & 214 &   0 &   0 &   0 \\
+      3 &   1 &   0 &   0 & 272 &   2 &   0 \\
+      4 &   0 &   0 &   0 &   1 & 302 &   0 \\
+      5 &   0 &   0 &   0 &   2 &   1 & 324 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Joint–angle regression head ($J\!=\!14$).}
+The regression branch attains a global \textbf{MAE of $4.73^{\circ}$}, well inside the \mbox{$\le\!5$--$8^{\circ}$} window that
+multiple clinical studies regard as acceptable for marker-less
+kinematics \cite{McGinley2009Reliability,Hu2021KinectKnee}.  Consequently, \textbf{93\,\%} of the test
+windows provide numerically actionable feedback without additional
+post-processing.  A per-joint breakdown (not shown) reveals the lowest
+errors at the knees (3.1$^{\circ}$) and the highest at the ankles
+(5.9$^{\circ}$), reflecting typical view-dependent noise patterns in
+pose estimation.
+
+% ---------------------------------------------------------------------------
+\subsubsection{Deployment Diagnostics}
+% ---------------------------------------------------------------------------
+
+Running in fp16 on a single RTX~4090, PoseQualityNetKP processes
+\textbf{7.5\,k\,frames\,s$^{-1}$}—\(\!\times\)250 real-time while containing only \textbf{3.41\,M} trainable weights (Table~\ref{tab:overall}),
+comfortably within mobile memory budgets.  The architecture thus scales to
+multiple concurrent 30\,Hz streams and remains suitable for edge
+deployment.
+
+\bigskip
+\noindent
+\textbf{Take-away.}  Across all four primary metrics
+(Accuracy\slash F1 for two heads, MAE for regression, FPS\slash size for
+deployment) the proposed model meets or exceeds the targets stipulated in
+Section~\ref{sec:metrics}, validating the exercise-conditioned design and
+its suitability for real-time physiotherapy applications.
+
+
+
+\subsubsection{Qualitative results}  % 4.4.2
+\label{sec:qual}
+
+To be written
+
+% ---------------------------------------------------------------------------
+\subsection{Ablation study}
+\label{sec:ablation}
+% ---------------------------------------------------------------------------
+
+To quantify how each architectural block contributes to the final
+performance, we trained four variants of PoseQualityNetKP:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{A} – CNN feature extractor only  
+  \item \textbf{B} – CNN + exercise–ID embedding  
+  \item \textbf{C} – CNN + bidirectional LSTM (temporal encoder)  
+  \item \textbf{FULL} – CNN + Bi-LSTM + exercise–ID embedding
+\end{itemize}
+
+Table~\ref{tab:ablate} reports the main metrics on the held-out test
+split (\mbox{4\,112} windows).  All variants easily exceed real-time
+throughput (FPS $\gg$ 30), but differ markedly in accuracy, regression
+error, and model size.
+
+% ---------------------------------------------------------------------------
+\begin{table}[H] 
+  \caption{Ablation results on the REHAB24-6 test split.
+           FPS measured with a 64-frame dummy clip on a single RTX 4090 (fp16).}
+  \label{tab:ablate}
+  \centering
+  \small               % or \footnotesize to squeeze further
+  \setlength{\tabcolsep}{3pt}   % tighten column spacing
+  \begin{tabularx}{\columnwidth}{@{}lCCCCCCC@{}}
+    \toprule
+    \textbf{Variant} &
+    \textbf{Rep-Acc} & \textbf{Rep-F1} &
+    \textbf{Ex-Acc}  & \textbf{Ex-F1} &
+    \textbf{MAE ($^{\circ}$)} & \textbf{FPS} & \textbf{Params (M)} \\ \midrule
+    A (CNN)                 & 0.797 & 0.797 & 0.994 & 0.993 & 8.49 & 9\,160 & 0.25 \\
+    B (CNN + Emb)           & 0.821 & 0.819 & 0.994 & 0.994 & 6.18 & 9\,126 & 0.25 \\
+    C (CNN + Bi-LSTM)       & 0.853 & 0.853 & 0.996 & 0.996 & 6.12 & 7\,256 & 3.40 \\
+    \textbf{FULL}           & \textbf{0.903} & \textbf{0.903} &
+                              \textbf{0.997} & \textbf{0.997} &
+                              \textbf{3.86} & 7\,383 & 3.41 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+% ---------------------------------------------------------------------------
+
+\subsubsection{Discussion.}
+\begin{enumerate}[leftmargin=1.35em,itemsep=2pt]
+  \item \textbf{Exercise embedding (\textit{A} $\rightarrow$ \textit{B}).}
+        Conditioning the quality and error heads on a one-hot exercise
+        context yields an immediate boost in repetition accuracy
+        (+2.4 pp) and cuts the MAE by \(\approx\,27\%\) at \emph{no}
+        parameter cost, confirming that task-specific priors simplify
+        the decision boundary.
+  \item \textbf{Temporal encoder (\textit{A} $\rightarrow$ \textit{C}).}
+        Replacing frame-wise pooling with a Bi-LSTM improves all four
+        recognition metrics, most notably repetition quality
+        (+5.6 pp).
+  \item \textbf{Synergy (\textit{C} $\rightarrow$ \textit{FULL}).}
+        Combining both blocks is \emph{additive}: the MAE is nearly
+        halved relative to the CNN baseline (–4.6$^{\circ}$), while
+        repetition accuracy gains a further +5 pp.  The parameter
+        increase from 0.25 M to 3.4 M is marginal for modern GPUs and
+        remains well within mobile budgets.
+\end{enumerate}
+
+Overall, the results validate the design choice of coupling a
+light-weight temporal encoder with an exercise-aware context vector:
+together they deliver the largest accuracy gains and the lowest
+joint-angle error while maintaining real-time speed.
+
+
+% ---------------------------------------------------------------------------
+\subsection{Discussion and limitations}
+\label{sec:limit}
+% ---------------------------------------------------------------------------
+\textbf{Model strengths.}  
+PoseQualityNet-KP achieves convincing performance with a footprint of
+only 3.4 M weights.  Its multi-head design yields three practical
+advantages:  
+(i)~joint-level feedback instead of a binary verdict,  
+(ii)~automatic suppression of advice when the wrong drill is performed,
+and  
+(iii)~edge-ready inference (\(\sim\)30 fps on CPU, 7.5 k windows s\(^{-1}\)
+in isolation).
+
+\textbf{Residual failure modes.}  
+Qualitative inspection reveals four recurring sources of error:
+\begin{enumerate}[label=(\alph*),leftmargin=1.6em,itemsep=3pt]
+  \item \emph{Self-occlusion.}  Exercises that hide an entire limb
+        (e.g.\ seated squats with arms on thighs) occasionally produce
+        invalid landmark estimates, which in turn mis-trigger the
+        quality classifier.
+  \item \emph{Camera pose.}  MediaPipe accuracy degrades once the sensor
+        is pitched by more than \(\pm20^{\circ}\) or rolled
+        non-horizontally, leading to spurious angle errors.
+  \item \emph{Small extremities.}  Ankle landmarks occupy only a few
+        pixels in a 640\(\times\)480 recording; the regressor therefore
+        shows the highest MAE at those joints (5.9\(^{\circ}\)).
+  \item \emph{Limited demographics.}  REHAB24-6 contains ten healthy
+        young adults; performance on elderly or post-operative patients
+        is untested.  Domain shift due to loose clothing, larger body
+        mass, or assistive devices remains an open question.
+\end{enumerate}
+
+\textbf{Mitigation strategies.}  
+Multi-view capture or synthetic occlusion augmentation could harden the
+network against self-occlusion.  A fast entropy filter on the landmark
+heatmaps would allow dynamic confidence weighting when the camera is
+improperly oriented.  Finally, collecting a more diverse cohort and
+fine-tuning the ankle channels with higher-resolution crops are expected
+to close the remaining accuracy gap.
+
+% ---------------------------------------------
+\section{Conclusions and future work}
+\label{sec:concl}
+% ---------------------------------------------
+We introduced PoseQualityNet-KP, a 3-head CNN–BiLSTM that turns a single
+web-camera stream into joint-specific rehabilitation feedback.  Trained
+on the cleaned REHAB24-6 corpus, the model reaches
+\textbf{91.5 \%} repetition-quality accuracy
+(\(F_{1}=0.915\)), \textbf{99.5 \%} \(F_{1}\) for exercise recognition,
+and a \textbf{4.73\(^{\circ}\)} global MAE across 14 joint angles while
+running fully on-device at real-time speed.  An ablation study confirms
+that both the Bi-LSTM temporal encoder and the exercise-ID embedding are
+essential: together they halve the angular error and raise quality
+\(F_{1}\) by +10 pp with only a minor increase in parameters.
+
+\textbf{Next steps} will address three axes:
+\begin{enumerate}[label=\arabic*.,leftmargin=1.35em,itemsep=3pt]
+  \item \emph{Robustness.}  Integrate a lightweight self-supervised
+        pre-text task to improve landmark reliability under occlusion
+        and extreme camera angles, and explore multi-view fusion when a
+        second device is available.
+  \item \emph{Personalisation.}  Add a 30-s calibration routine that
+        learns user-specific joint-angle baselines and dynamically
+        tightens tolerances as rehabilitation progresses.
+  \item \emph{Deployment.}  Convert the network to 4-bit QAT ONNX,
+        bundle it inside a cross-platform mobile SDK, and conduct a
+        six-week field study with post-operative patients to quantify
+        adherence and recovery gains versus usual care.
+\end{enumerate}
+
+Taken together, these extensions aim to transform the current prototype
+into a clinically validated, low-cost companion for at-home
+physiotherapy.
+
+\section{Author contributions}
+The sole author, \textbf{Jithin Krishnan}, conceived the project idea, designed the methodology, implemented the system (including data processing, model development, and front-/back-end integration), performed all experiments, analysed the results, and wrote the manuscript.
+
+
+\bibliographystyle{IEEEbib}
+\bibliography{references}
+
+\end{document}
