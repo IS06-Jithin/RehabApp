@@ -50,10 +50,8 @@ RehabApp is an end-to-end research prototype that:
 3.  **Access the application:**
     Once the build is complete and containers are running:
     *   **React Client (Frontend):** [http://localhost:3000](http://localhost:3000) (allow webcam access when prompted)
-    *     
-        <!-- Fixed height (GitHub preserves aspect ratio) -->
-        <img src="https://github.com/user-attachments/assets/532329d0-e42d-4e56-9520-bf0b3042704a" height="200" alt="Demo" />
-
+    *   <img src="https://github.com/user-attachments/assets/532329d0-e42d-4e56-9520-bf0b3042704a" height="200" alt="Demo" />
+        
 
 ---
 
