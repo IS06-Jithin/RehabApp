@@ -1,10 +1,19 @@
-# RehabApp – AI-Powered Physiotherapy Coach 🏋️‍♀️
+# Pose Correction System for Physical Therapy & Rehabilitation 🏋️‍♀️
 
-RehabApp is an end-to-end research prototype that:
+---
 
-*   🏋️‍♀️ **Trains** a lightweight multi-head CNN + Bi-LSTM (PoseQualityNet-KP) on the **REHAB24-6** physiotherapy corpus.
-*   📊 **Evaluates** its accuracy, ablation variants, and inference speed.
-*   🚀 **Serves** real-time, joint-level feedback through a **FastAPI** back-end and a **React** front-end.
+## What you’ll find here
+
+| Module | Highlights |
+|--------|------------|
+| **Data prep & augmentation** | Jupyter notebooks and helper scripts that clean the original **REHAB24-6** corpus and generate augmented training windows. |
+| **PoseQualityNet-KP** | A 3-head CNN + Bi-LSTM that predicts exercise ID, repetition quality, and 14 joint-angle errors—only 3.4 M parameters. |
+| **Training • Evaluation • Ablation** | Notebooks and Python scripts that reproduce all reported metrics and architecture variants. |
+| **RehabApp** | Deployable application &mdash; FastAPI back-end, React front-end, SQLite persistence, Docker-compose one-liner. |
+| **Docs & assets** | Diagrams, demo GIFs, and step-by-step usage guides. |
+
+**RehabApp** is an end-to-end AI physiotherapy coach that turns an ordinary webcam into a real-time form-correction assistant.  
+This repository bundles everything you need—from data preparation to a deployable FastAPI + React stack.
 
 <p align="center">
   <img src="docs/teaser.gif" alt="Live demo of RehabApp providing real-time feedback" width="700">
