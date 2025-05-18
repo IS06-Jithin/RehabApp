@@ -20,7 +20,7 @@ This repository bundles everything you need—from data preparation to a deploya
 </p>
 
 ---
-
+Repo Link: https://github.com/IS06-Jithin/RehabApp.git
 # 📂 Repository Layout
 
 | Path                                                     | What’s inside                                                                  |
