@@ -392,7 +392,7 @@ $\langle$detected exercise$\rangle$.”}} This safeguard prevents users from fol
 advice meant for a different movement.
 
 \paragraph{Edge feasibility.}
-PoseQualityNet-KP contains only 3.4 M parameters ($<$ 8 MB) and maintains
+PoseQualityNet-KP contains only 3.4 M parameters ($<$ 11 MB) and maintains
 $\approx$ 30 fps inference on a mid-range CPU.  All computation happens
 locally: the webcam feed is converted to 99-value key-point tensors and
 \emph{only those tensors} traverse the WebSocket, so no raw video ever
@@ -691,8 +691,8 @@ validation set and kept fixed for all reported experiments.
         early-stopping after 6~epochs without \textit{Rep-F1} improvement.
 
   \item \textbf{Runtime.}  
-        Training converges within 29–34 epochs (≈35 min wall-clock);  
-        inference speed is ≈30 fps on the target device, measured with a
+        Training converges within 30–35 epochs (≈40 min wall-clock);  
+        inference speed is ≈30fps on the target device, measured with a
         64-frame dummy roll-out.
 \end{itemize}
 
